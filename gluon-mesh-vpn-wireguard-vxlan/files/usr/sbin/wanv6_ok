@@ -1,3 +1,0 @@
-#!/bin/sh
-
-/sbin/ip addr show br-wan 2>/dev/null | /usr/bin/awk '/inet / {v4=$2;} /inet6 / {v6=$2; gsub("^f.*$", "", v6);} END{if(length(v6)>6){rc=0;}else{rc=1;}printf("%s\n", rc==0?v6:v4); exit(rc);}'
