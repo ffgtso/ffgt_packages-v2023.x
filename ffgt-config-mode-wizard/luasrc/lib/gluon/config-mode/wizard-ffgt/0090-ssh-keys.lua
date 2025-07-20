@@ -17,7 +17,7 @@ return function(form, uci)
 		text = ffgt_i18n.translate('There are SSH keys (%s) configured, fine!')
 		text = string.format(text, rc)
 	end
-	text = text .. "<br> </br><br> </br>"
+	text = text .. "<br> </br>"
 	text = text .. ffgt_i18n.translate('To change it, go to %s.')
 	text = string.format(text, '<a href="/cgi-bin/config/admin/remote">%s</a>')
 	text = string.format(text, text2)
