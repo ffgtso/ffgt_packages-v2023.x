@@ -73,11 +73,11 @@ else
 <%
 end
 
-if located==0 then
-%>
+if located==0 then %>
     <p><%:To select which configuration your node should use, we need to know where it will be located.%></p>
 	<p><%:We will use OpenStreetMap data to convert the coordinates you enter below to a street address, which in turn will result in a location code (locode).%></p>
-    local addr = uci:get("gluon-node-info", location, "addr") or ""
+<%
+	local addr = uci:get("gluon-node-info", location, "addr") or ""
 	local city = uci:get("gluon-node-info", location, "city") or ""
 	local zip = uci:get("gluon-node-info", location, "zip") or ""
 	local loctxt = unlocode or ""
@@ -87,19 +87,40 @@ if located==0 then
 	local text = translate('Located the future position of this node as follows, please verify:')
 	text = text .. '<br>' .. mystr
 	write(text)
+%>
 
 	<div class="gluon-section-node">
 		<div class="gluon-value">
-			<label class="gluon-value-title"><%:Latitude%></label>
+			<label class="gluon-value-title"><%:LAT%></label>
 			<div class="gluon-value-field"><input class="gluon-input-file" type="text" name="lat" value="<%=lat%>"/></div>
-			<label class="gluon-value-title"><%:Longitude%></label>
+		</div>
+    </div>
+	<div class="gluon-section-node">
+		<div class="gluon-value">
+			<label class="gluon-value-title"><%:LON%></label>
 			<div class="gluon-value-field"><input class="gluon-input-file" type="text" name="lon" value="<%=lon%>"/></div>
+		</div>
+    </div>
+	<div class="gluon-section-node">
+		<div class="gluon-value">
 			<label class="gluon-value-title"><%:ADDR%></label>
 			<div class="gluon-value-field"><input class="gluon-input-file" type="text" name="addr" value="<%=addr%>"/></div>
+		</div>
+    </div>
+	<div class="gluon-section-node">
+		<div class="gluon-value">
 			<label class="gluon-value-title"><%:CTY%></label>
 			<div class="gluon-value-field"><input class="gluon-input-file" type="text" name="city" value="<%=city%>"/></div>
-			<label class="gluon-value-title"><%:ZIPe%></label>
+		</div>
+    </div>
+	<div class="gluon-section-node">
+		<div class="gluon-value">
+			<label class="gluon-value-title"><%:ZIP%></label>
 			<div class="gluon-value-field"><input class="gluon-input-file" type="text" name="zip" value="<%=zip%>"/></div>
+		</div>
+    </div>
+	<div class="gluon-section-node">
+		<div class="gluon-value">
 			<label class="gluon-value-title"><%:LOC%></label>
 			<div class="gluon-value-field"><input class="gluon-input-file" type="text" name="loc" value="<%=loctxt%>"/></div>
 		</div>

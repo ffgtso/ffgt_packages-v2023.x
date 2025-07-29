@@ -1,3 +1,0 @@
-1,16,31,46 * * * * /lib/gluon/ffgt-geolocate/senddata.sh
-*/15 * * * * /lib/gluon/ffgt-geolocate/getcfg.sh
-0 0,12 * * * /bin/touch /tmp/run/gotcfg && /bin/rm /tmp/run/gotcfg
