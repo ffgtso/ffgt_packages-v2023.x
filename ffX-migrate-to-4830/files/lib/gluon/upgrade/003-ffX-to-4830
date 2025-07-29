@@ -51,8 +51,17 @@ if [ "$(uci get autoupdater.stable.mirror | grep freifunk-lippe.de >/dev/null ; 
  lat=$(uci get gluon-node-info.@location[0].latitude 2>/dev/null || echo "0.00")
  lon=$(uci get gluon-node-info.@location[0].longitude 2>/dev/null || echo "0.00")
  if [ "$lat" != "0.00" -a "$lon" != "0.00" ]; then
-  if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if($1<51.72830 && $2<8.33347) {printf("true");} else {printf("false");}}')" = "true" ]; then
-   echo "Geolocation based migration moves node $hostname from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
+  # Moehnesee
+  if [ "$(echo "$lat $lon" | awk '{if(($1>=51.467 && $1<=51.519) && ($2>=8.19 && $2<=8.21)) {printf("true");} else {printf("false");}}')" = "true" ]; then
+   echo "Geolocation based migration moves node $hostname at ${lat};${lon} (Moehnesee) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
+   domain="mns"
+  fi # Soest FIXME
+  if [ "$(echo "$lat $lon" | awk '{if(($1>=51.620 && $1<=51.622) && ($2>=7.979 && $2<=8.185)) {printf("true");} else {printf("false");}}')" = "true" ]; then
+   echo "Geolocation based migration moves node $hostname at ${lat};${lon} (Soest) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
+   domain="mns"
+  fi # Hamm FIXME
+  if [ "$(echo "$lat $lon" | awk '{if(($1>=51.467 && $1<=51.519) && ($2>=8.19 && $2<=8.21)) {printf("true");} else {printf("false");}}')" = "true" ]; then
+   echo "Geolocation based migration moves node $hostname at ${lat};${lon} (Hamm) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
    domain="mns"
   fi
  fi
