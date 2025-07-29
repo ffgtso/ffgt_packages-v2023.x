@@ -14,6 +14,7 @@ $Id$
 <%
 local util = require 'gluon.util'
 local site = require 'gluon.site'
+local sysconfig = require 'gluon.sysconfig'
 local uci = require("simple-uci").cursor()
 %>
 <h2><%:Geolocation%></h2>
@@ -43,7 +44,7 @@ if (lat == 0) and (lon == 0) then %>
 	</p>
 <%
 elseif not unlocode then %>
-	<p class="error" style="text-align: justify;"><%:No location code set, please retry..%></p>
+	<p class="error" style="text-align: justify;"><%:No location code set!%></p>
 	<p>
 		<%:Please enter the coordinates where this node will be located at.%>
 	</p>
@@ -55,40 +56,44 @@ elseif null_coords then %>
 	</p>
 <%
 else
-    local addr = uci:get("gluon-node-info", location, "addr") or "FEHLER_ADDR"
-	local city = uci:get("gluon-node-info", location, "city") or "FEHLER_ORT"
-	local zip = uci:get("gluon-node-info", location, "zip") or "00000"
-	local communityname = string.gsub(util.exec(string.format("/lib/gluon/ffgt-geolocate/get_domain_name.sh %s", unlocode)),"\n", "")
-	local mystr = '<b>' .. translate('Address') .. string.format(":</b> %s, %s %s<br>", addr, zip, city)
-	mystr = mystr .. '<b>' .. translate('Coordinates') .. string.format(":</b> %f; %f<br>", lat, lon)
-	mystr = mystr .. '<b>' .. translate('Mesh') .. string.format(":</b> %s", communityname)
-	local text = translate('Located the future position of this node as follows, please verify:')
-	text = text .. '<br>' .. mystr
-	write(text)
+--  local addr = uci:get("gluon-node-info", location, "addr") or "FEHLER_ADDR"
+--	local city = uci:get("gluon-node-info", location, "city") or "FEHLER_ORT"
+--	local zip = uci:get("gluon-node-info", location, "zip") or "00000"
+--	local communityname = string.gsub(util.exec(string.format("/lib/gluon/ffgt-geolocate/get_domain_name.sh %s", unlocode)),"\n", "")
+--	local mystr = '<b>' .. translate('Address') .. string.format(":</b> %s, %s %s<br>", addr, zip, city)
+--	mystr = mystr .. '<b>' .. translate('Coordinates') .. string.format(":</b> %f; %f<br>", lat, lon)
+--	mystr = mystr .. '<b>' .. translate('Mesh') .. string.format(":</b> %s", communityname)
+--	local text = translate('Located the future position of this node as follows, please verify:')
+--	text = text .. '<br>' .. mystr
+--	write(text)
 	located=1
-%>
-	<p>
-		<%:If neccessary, please update where this node will be located at.%>
-	</p>
-<%
 end
-
-if located==0 then %>
+%>
     <p><%:To select which configuration your node should use, we need to know where it will be located.%></p>
-	<p><%:We will use OpenStreetMap data to convert the coordinates you enter below to a street address, which in turn will result in a location code (locode).%></p>
+<%
+text = translate('As this node is offline, please go to <br>&nbsp;<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;%s<br>&nbsp;<br>to get the data you need to fill out below, with the PLACEHOLDERS replaced by numbers in English notation (e. g. "...&lat=53.456&lon=8.765"). You may find coordinates via the picker at our map, https://map.4830.org, OpenStreetMap, etc.')
+
+local url="http://setup.4830.org/geoloc.php?rgeo=reg&node=%s&lat=LATITUDE&lon=LONGITUDE"
+url=string.format(url, sysconfig.primary_mac)
+text='<p>' .. string.format(text, url) .. '</p>'
+write(text)
+%>
+	<p><%:If neccessary, please update where this node will be located at.%></p>
 <%
 	local addr = uci:get("gluon-node-info", location, "addr") or ""
 	local city = uci:get("gluon-node-info", location, "city") or ""
 	local zip = uci:get("gluon-node-info", location, "zip") or ""
 	local loctxt = unlocode or ""
-	local mystr = '<b>' .. translate('Address') .. string.format(":</b> %s, %s %s<br>", addr, zip, city)
-	mystr = mystr .. '<b>' .. translate('Coordinates') .. string.format(":</b> %f; %f<br>", lat, lon)
-	mystr = mystr .. '<b>' .. translate('Locode') .. string.format(":</b> %s", loctxt)
-	local text = translate('Located the future position of this node as follows, please verify:')
-	text = text .. '<br>' .. mystr
-	write(text)
-%>
 
+	if located == 1 then
+		local mystr = '<b>' .. translate('Address') .. string.format(":</b> %s, %s %s<br>", addr, zip, city)
+		mystr = mystr .. '<b>' .. translate('Coordinates') .. string.format(":</b> %f; %f<br>", lat, lon)
+		mystr = mystr .. '<b>' .. translate('Locode') .. string.format(":</b> %s", loctxt)
+		local text = translate('Located the future position of this node as follows, please verify:')
+		text = text .. '<br>&nbsp;<br>' .. mystr .. '<br>&nbsp;<br>'
+		write(text)
+	end
+%>
 	<div class="gluon-section-node">
 		<div class="gluon-value">
 			<label class="gluon-value-title"><%:LAT%></label>
@@ -125,9 +130,6 @@ if located==0 then %>
 			<div class="gluon-value-field"><input class="gluon-input-file" type="text" name="loc" value="<%=loctxt%>"/></div>
 		</div>
     </div>
-<%
-end
-%>
 
 	<div class="gluon-page-actions right">
 		<input type="hidden" name="step" value="2" />

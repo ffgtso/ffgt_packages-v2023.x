@@ -15,8 +15,12 @@ local util = require 'gluon.util'
 local site = require 'gluon.site'
 local uci = require("simple-uci").cursor()
 local unistd = require 'posix.unistd'
+local log = require 'posix.syslog'
 
 local function trim(s)
+  if not s then
+    s=""
+  end
   return (s:gsub("^%s*(.-)%s*$", "%1"))
 end
 
@@ -26,13 +30,18 @@ local function action_geoloc(http, renderer)
     local location = uci:get_first("gluon-node-info", "location")
     local lat = uci:get("gluon-node-info", location, "latitude")
     local lon = uci:get("gluon-node-info", location, "longitude")
+    local is_offline = unistd.access('/tmp/is_online') or 1
+
+    -- If node is offline, retry online check ...
+    if is_offline == 1 then
+        os.execute("/lib/gluon/ffgt-geolocate/ipv5.sh >/dev/null")
+    end
+    is_offline = unistd.access('/tmp/is_online') or 1
+
+    log.syslog(log.LOG_INFO, "Step=" .. step .. " offline=" .. is_offline)
 
 	-- Step 1: Select/enter coordinates; if some are there alredy, try reverse geolocation with them
 	if step == 1 then
-	    -- If node is offline, retry online check ...
-        if unistd.access('/tmp/is_online') ~= 0 then
-            os.execute("/lib/gluon/ffgt-geolocate/ipv5.sh >/dev/null")
-        end
 	    -- Use a separate form when node is offline
 	    if unistd.access('/tmp/is_online') ~= 0 then
             if not lat then lat = 0 else lat=tonumber(lat) end
@@ -61,36 +70,64 @@ local function action_geoloc(http, renderer)
             local newlat = tonumber(trim(http:formvalue("lat")))
             local newlon = tonumber(trim(http:formvalue("lon")))
 
-            if not newlat or not newlon then
-                renderer.render_layout('admin/geolocate_new1', { null_coords = 1, }, 'ffgt-config-mode-wizard')
-            else
-                local cmdstr = string.format("/lib/gluon/ffgt-geolocate/rgeo.sh %f %f 2>/dev/null >/dev/null", newlat, newlon)
-                os.execute(cmdstr)
+            if is_offline == 1 then
+                local newaddr = trim(http:formvalue("addr"))
+                local newcity = trim(http:formvalue("city"))
+                local newzip = tonumber(trim(http:formvalue("zip") or "0000"))
+                local newloc = trim(http:formvalue("loc"))
 
-                location = uci:get_first("gluon-node-info", "location")
-                lat = uci:get("gluon-node-info", location, "latitude")
-                lon = uci:get("gluon-node-info", location, "longitude")
-                local unlocode = uci:get("gluon-node-info", location, "locode")
+                log.syslog(log.LOG_INFO, newlat .. ", " .. newlon .. ", " .. newaddr .. ", " .. newcity .. ", " .. newzip .. ", " .. newloc)
 
-                if not lat then lat = 0 else lat=tonumber(lat) end
-                if not lon then lon = 0 else lon=tonumber(lon) end
-                -- lat / lon were no numbers ...
-                if not lat then lat = 0 end
-                if not lon then lon = 0 end
-                if (lat == 51.892825) and (lon == 8.383708) then
-                    lat=51.0
-                    lon=9.0
-                end
-
-                if ((lat == 0 and lon == 0) or (lat == 51.0 and lon == 9.0)) then
-                    renderer.render_layout('admin/geolocate_new1', { rgeo_error = 1, }, 'ffgt-config-mode-wizard')
-                else
-                    uci:set('gluon', 'core', 'domain', unlocode)
+                if newloc then
+                    location = uci:get_first("gluon-node-info", "location")
+                    uci:set("gluon-node-info", location, "latitude", newlat)
+                    uci:set("gluon-node-info", location, "longitude", newlon)
+                    uci:set("gluon-node-info", location, "addr", newaddr)
+                    uci:set("gluon-node-info", location, "city", newcity)
+                    uci:set("gluon-node-info", location, "zip", newzip)
+                    uci:set("gluon-node-info", location, "locode", newloc)
+                    uci:commit("gluon-node-info")
+                    uci:set('gluon', 'core', 'domain', newloc)
                     uci:commit('gluon')
                     os.execute('gluon-reconfigure >/dev/null')
                     local cmdstr='touch /tmp/return2wizard.hack 2>/dev/null >/dev/null'
                     os.execute(cmdstr)
                     renderer.render_layout('admin/geolocate_newdone', nil, 'ffgt-config-mode-wizard')
+                else
+                    renderer.render_layout('admin/geolocate_offline', { null_coords = (lat == 0 and lon == 0), }, 'ffgt-config-mode-wizard')
+                end
+            else
+                if not newlat or not newlon then
+                    renderer.render_layout('admin/geolocate_new1', { null_coords = 1, }, 'ffgt-config-mode-wizard')
+                else
+                    local cmdstr = string.format("/lib/gluon/ffgt-geolocate/rgeo.sh %f %f 2>/dev/null >/dev/null", newlat, newlon)
+                    os.execute(cmdstr)
+
+                    location = uci:get_first("gluon-node-info", "location")
+                    lat = uci:get("gluon-node-info", location, "latitude")
+                    lon = uci:get("gluon-node-info", location, "longitude")
+                    local unlocode = uci:get("gluon-node-info", location, "locode")
+
+                    if not lat then lat = 0 else lat=tonumber(lat) end
+                    if not lon then lon = 0 else lon=tonumber(lon) end
+                    -- lat / lon were no numbers ...
+                    if not lat then lat = 0 end
+                    if not lon then lon = 0 end
+                    if (lat == 51.892825) and (lon == 8.383708) then
+                        lat=51.0
+                        lon=9.0
+                    end
+
+                    if ((lat == 0 and lon == 0) or (lat == 51.0 and lon == 9.0)) then
+                        renderer.render_layout('admin/geolocate_new1', { rgeo_error = 1, }, 'ffgt-config-mode-wizard')
+                    else
+                        uci:set('gluon', 'core', 'domain', unlocode)
+                        uci:commit('gluon')
+                        os.execute('gluon-reconfigure >/dev/null')
+                        local cmdstr='touch /tmp/return2wizard.hack 2>/dev/null >/dev/null'
+                        os.execute(cmdstr)
+                        renderer.render_layout('admin/geolocate_newdone', nil, 'ffgt-config-mode-wizard')
+                    end
                 end
             end
         end
