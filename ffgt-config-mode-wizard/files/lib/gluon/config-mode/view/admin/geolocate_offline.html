@@ -1,0 +1,116 @@
+<%#
+Copyright 2008 Steven Barth <steven@midlink.org>
+Copyright 2008-2009 Jo-Philipp Wich <xm@subsignal.org>
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+$Id$
+
+-%>
+<%
+local util = require 'gluon.util'
+local site = require 'gluon.site'
+local uci = require("simple-uci").cursor()
+%>
+<h2><%:Geolocation%></h2>
+
+<form method="post" enctype="multipart/form-data" action="<%|url(request)%>">
+<%
+local located=0
+local location = uci:get_first("gluon-node-info", "location")
+local lat = uci:get("gluon-node-info", location, "latitude")
+local lon = uci:get("gluon-node-info", location, "longitude")
+local unlocode = uci:get("gluon-node-info", location, "locode")
+if not lat then lat=0 else lat=tonumber(lat) end
+if not lon then lon=0 else lon=tonumber(lon) end
+-- if lat/lon were no numbers, tonumber() yields nil
+if not lat then lat=0 end
+if not lon then lon=0 end
+if (lat == 51.892825) and (lon == 8.383708) then
+	lat=0
+	lon=0
+end
+%><!-- Lat: <%=lat%> Lon: <%=lon%> Loc: <%=unlocode%> --><%
+
+if (lat == 0) and (lon == 0) then %>
+	<p class="error" style="text-align: justify;"><%:No coordinates set and node is offline. We *need* a proper location to assign this node to a Freifunk network ("mesh", "hood", "community", ...).%></p>
+	<p>
+		<%:Please enter the coordinates where this node will be located at.%>
+	</p>
+<%
+elseif not unlocode then %>
+	<p class="error" style="text-align: justify;"><%:No location code set, please retry..%></p>
+	<p>
+		<%:Please enter the coordinates where this node will be located at.%>
+	</p>
+<%
+elseif null_coords then %>
+	<p class="error" style="text-align: justify;"><%:Looks like geolocation failed. Please retry.%></p>
+	<p>
+		<%:Please enter the coordinates where this node will be located at.%>
+	</p>
+<%
+else
+    local addr = uci:get("gluon-node-info", location, "addr") or "FEHLER_ADDR"
+	local city = uci:get("gluon-node-info", location, "city") or "FEHLER_ORT"
+	local zip = uci:get("gluon-node-info", location, "zip") or "00000"
+	local communityname = string.gsub(util.exec(string.format("/lib/gluon/ffgt-geolocate/get_domain_name.sh %s", unlocode)),"\n", "")
+	local mystr = '<b>' .. translate('Address') .. string.format(":</b> %s, %s %s<br>", addr, zip, city)
+	mystr = mystr .. '<b>' .. translate('Coordinates') .. string.format(":</b> %f; %f<br>", lat, lon)
+	mystr = mystr .. '<b>' .. translate('Mesh') .. string.format(":</b> %s", communityname)
+	local text = translate('Located the future position of this node as follows, please verify:')
+	text = text .. '<br>' .. mystr
+	write(text)
+	located=1
+%>
+	<p>
+		<%:If neccessary, please update where this node will be located at.%>
+	</p>
+<%
+end
+
+if located==0 then
+%>
+    <p><%:To select which configuration your node should use, we need to know where it will be located.%></p>
+	<p><%:We will use OpenStreetMap data to convert the coordinates you enter below to a street address, which in turn will result in a location code (locode).%></p>
+    local addr = uci:get("gluon-node-info", location, "addr") or ""
+	local city = uci:get("gluon-node-info", location, "city") or ""
+	local zip = uci:get("gluon-node-info", location, "zip") or ""
+	local loctxt = unlocode or ""
+	local mystr = '<b>' .. translate('Address') .. string.format(":</b> %s, %s %s<br>", addr, zip, city)
+	mystr = mystr .. '<b>' .. translate('Coordinates') .. string.format(":</b> %f; %f<br>", lat, lon)
+	mystr = mystr .. '<b>' .. translate('Locode') .. string.format(":</b> %s", loctxt)
+	local text = translate('Located the future position of this node as follows, please verify:')
+	text = text .. '<br>' .. mystr
+	write(text)
+
+	<div class="gluon-section-node">
+		<div class="gluon-value">
+			<label class="gluon-value-title"><%:Latitude%></label>
+			<div class="gluon-value-field"><input class="gluon-input-file" type="text" name="lat" value="<%=lat%>"/></div>
+			<label class="gluon-value-title"><%:Longitude%></label>
+			<div class="gluon-value-field"><input class="gluon-input-file" type="text" name="lon" value="<%=lon%>"/></div>
+			<label class="gluon-value-title"><%:ADDR%></label>
+			<div class="gluon-value-field"><input class="gluon-input-file" type="text" name="addr" value="<%=addr%>"/></div>
+			<label class="gluon-value-title"><%:CTY%></label>
+			<div class="gluon-value-field"><input class="gluon-input-file" type="text" name="city" value="<%=city%>"/></div>
+			<label class="gluon-value-title"><%:ZIPe%></label>
+			<div class="gluon-value-field"><input class="gluon-input-file" type="text" name="zip" value="<%=zip%>"/></div>
+			<label class="gluon-value-title"><%:LOC%></label>
+			<div class="gluon-value-field"><input class="gluon-input-file" type="text" name="loc" value="<%=loctxt%>"/></div>
+		</div>
+    </div>
+<%
+end
+%>
+
+	<div class="gluon-page-actions right">
+		<input type="hidden" name="step" value="2" />
+		<input type="hidden" name="token" value="<%=token%>" />
+		<input class="gluon-button gluon-button-submit" type="submit" value="<%:Submit%>" />
+	</div>
+</form>

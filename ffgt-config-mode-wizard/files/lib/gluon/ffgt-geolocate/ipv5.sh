@@ -2,11 +2,9 @@
 #
 # nslookup myip.opendns.com 208.67.222.222 | awk '/^Address/ {ip=$NF;} END{printf("%s\n", ip);}'
 #
-# Do a reverse geocoding with current lat/lon settings
 # Bloody v4/v6 issues ... From an IPv4-only upstream, the preferred IPv6 AAAA record results in connection errors.
-# 2016-09-28: Argh. When in normal mode, resolving via (IPv4) upstream only works as group gluon-fastd. So
-# we (mis-) use /sbin/start-stop-daemon for executing ping as that gid.
-# 2018-08-18: Dropped that shit for v2018; no uplink to mesh, no connectivity, no care.
+# Now serves as is-online test as well, setting /tmp/is_online appropriately if online with IPv4 and/or IPv6.
+
 # 2020-08-30: Use gluon-wan to force v4 resolving via WAN if present.
 if [ -e /tmp/is_online ]; then /bin/rm /tmp/is_online ; fi
 USEIPV4=1

@@ -122,7 +122,7 @@ elseif rgeo_error then
 		</div>
     </div>
 <%
-	local has_wifi = string.gsub(util.exec("/usr/sbin/iw list | /usr/bin/wc -l"), "\n", "")
+	local has_wifi = string.gsub(util.exec("/usr/sbin/iw list | /bin/grep Wiphy | /usr/bin/wc -l"), "\n", "")
 	if (tonumber(has_wifi) > 0) then %>
 
     <p style="text-align: justify;"><%:This node can try network-based location. Our server will receive the neighbouring WiFi networks and try to translate that into a geoposition.%></p>

@@ -14,6 +14,7 @@ package 'ffgt-config-mode-wizard'
 local util = require 'gluon.util'
 local site = require 'gluon.site'
 local uci = require("simple-uci").cursor()
+local unistd = require 'posix.unistd'
 
 local function trim(s)
   return (s:gsub("^%s*(.-)%s*$", "%1"))
@@ -28,15 +29,27 @@ local function action_geoloc(http, renderer)
 
 	-- Step 1: Select/enter coordinates; if some are there alredy, try reverse geolocation with them
 	if step == 1 then
-        if not lat then lat = 0 else lat=tonumber(lat) end
-        if not lon then lon = 0 else lon=tonumber(lon) end
-        -- lat / lon were no numbers ...
-        if not lat then lat = 0 end
-        if not lon then lon = 0 end
-        if not (lat == 0 and lon == 0) then
-            os.execute("/lib/gluon/ffgt-geolocate/rgeo.sh >/dev/null")
+	    -- If node is offline, retry online check ...
+        if unistd.access('/tmp/is_online') ~= 0 then
+            os.execute("/lib/gluon/ffgt-geolocate/ipv5.sh >/dev/null")
         end
-		renderer.render_layout('admin/geolocate_new1', { null_coords = (lat == 0 and lon == 0), }, 'ffgt-config-mode-wizard')
+	    -- Use a separate form when node is offline
+	    if unistd.access('/tmp/is_online') ~= 0 then
+            if not lat then lat = 0 else lat=tonumber(lat) end
+            if not lon then lon = 0 else lon=tonumber(lon) end
+            renderer.render_layout('admin/geolocate_offline', { null_coords = (lat == 0 and lon == 0), }, 'ffgt-config-mode-wizard')
+        -- Online is the preferred way!
+        else
+            if not lat then lat = 0 else lat=tonumber(lat) end
+            if not lon then lon = 0 else lon=tonumber(lon) end
+            -- lat / lon were no numbers ...
+            if not lat then lat = 0 end
+            if not lon then lon = 0 end
+            if not (lat == 0 and lon == 0) then
+                os.execute("/lib/gluon/ffgt-geolocate/rgeo.sh >/dev/null")
+            end
+		    renderer.render_layout('admin/geolocate_new1', { null_coords = (lat == 0 and lon == 0), }, 'ffgt-config-mode-wizard')
+		end
 	-- Step 2: Try geolocate with the data entered, unless "autolocate" was selected, in which
 	--         case we ignore the coordinates entered.
 	elseif step == 2 then
