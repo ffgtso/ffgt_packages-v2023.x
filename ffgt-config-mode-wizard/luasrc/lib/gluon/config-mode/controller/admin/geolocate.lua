@@ -24,6 +24,29 @@ local function trim(s)
   return (s:gsub("^%s*(.-)%s*$", "%1"))
 end
 
+local function sanitize_name(s)
+	s = s:gsub("/","-")
+	s = s:gsub("&","und")
+	s = s:gsub("+","und")
+	s = s:gsub(";","-")
+	s = s:gsub("'","")
+	s = s:gsub("(","")
+	s = s:gsub(")","")
+	s = s:gsub("*","")
+    s = s:sub("%p","-")
+    s = s:gsub("_","-")
+    s = s:gsub("ä","ae")
+    s = s:gsub("ö","oe")
+    s = s:gsub("ü","ue")
+    s = s:gsub("ß","sz")
+    s = s:gsub("Ä","Ae")
+    s = s:gsub("Ö","Oe")
+    s = s:gsub("Ü","Ue")
+    s = s:gsub("$","")
+    s = s:gsub("%-%-","-")
+    return s
+end
+
 local function action_geoloc(http, renderer)
 	-- Determine state
 	local step = tonumber(http:getenv("REQUEST_METHOD") == "POST" and http:formvalue("step")) or 1
@@ -71,10 +94,10 @@ local function action_geoloc(http, renderer)
             local newlon = tonumber(trim(http:formvalue("lon")))
 
             if is_offline == 1 then
-                local newaddr = trim(http:formvalue("addr"))
-                local newcity = trim(http:formvalue("city"))
-                local newzip = tonumber(trim(http:formvalue("zip") or "0000"))
-                local newloc = trim(http:formvalue("loc"))
+                local newaddr = sanitize_name(trim(http:formvalue("addr")))
+                local newcity = sanitize_name(trim(http:formvalue("city")))
+                local newzip = sanitize_name(tonumber(trim(http:formvalue("zip") or "0000")))
+                local newloc = sanitize_name(trim(http:formvalue("loc")))
 
                 log.syslog(log.LOG_INFO, newlat .. ", " .. newlon .. ", " .. newaddr .. ", " .. newcity .. ", " .. newzip .. ", " .. newloc)
 

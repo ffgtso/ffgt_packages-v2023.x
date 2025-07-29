@@ -163,3 +163,20 @@ msgstr "Da wir die Meshes ortsbezogen automatisch zuweisen, ändere diese Einste
 
 msgid "Your node's setup is now complete."
 msgstr "Dein Freifunk-Knoten ist nun fertig konfiguriert."
+
+msgid "No coordinates set and node is offline. We *need* a proper location to assign this node to a Freifunk network ("mesh", "hood", "community", ...)."
+msgstr "Keine Koordinaten angegeben und der Knoten ist offline. Wir benötigen eine Aufstellposition für jeden Konten, um diesen für das richtige Freifunk-Netzwerk (\"Mesh\", \"Hood\", \"Community\", ...) zu konfigurieren."
+
+msgid "No location code set!"
+msgstr "Es ist noch kein Location-Code definiert!"
+
+msgid "Looks like geolocation failed. Please retry."
+msgstr "Geolokalisierung fehlgeschlagen, bitte erneut versuchen."
+
+msgid "As this node is offline, please go to <br>&nbsp;<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;%s<br>"
+"&nbsp;<br>to get the data you need to fill out below, with the PLACEHOLDERS replaced by numbers (e. g. "
+"'...&lat=53.456&lon=8.765'). You may find coordinates via the picker at our map (https://map.4830.org), OpenStreetMap, etc."
+msgstr "Da dieser Knoten nicht online ist, gehe bitte auf die Seite <br>&nbsp;<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;%s<br>"
+"&nbsp;<br>um die unten einzugebenen Daten zu berechnen. PLATZHALTER sind durch die korrekten Werte (mit Dezimalpunkt!) zu "
+"ersetzen, also z. B. so: '...&lat=53.456&lon=8.765'. Koordinaten kannst Du über unsere Karte (https://map.4830.org), "
+"OpenStreetMap oder ähnliche Dieste ermitteln."

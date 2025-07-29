@@ -143,3 +143,17 @@ msgstr "Please do not touch this setting unless you know what you are doing! We 
 
 msgid "Your node's setup is now complete."
 msgstr ""
+
+msgid "No coordinates set and node is offline. We *need* a proper location to assign this node to a Freifunk network ("mesh", "hood", "community", ...)."
+msgstr ""
+
+msgid "No location code set!"
+msgstr ""
+
+msgid "Looks like geolocation failed. Please retry."
+msgstr ""
+
+msgid "As this node is offline, please go to <br>&nbsp;<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;%s<br>"
+"&nbsp;<br>to get the data you need to fill out below, with the PLACEHOLDERS replaced by numbers (e. g. "
+"'...&lat=53.456&lon=8.765'). You may find coordinates via the picker at our map (https://map.4830.org), OpenStreetMap, etc."
+msgstr ""

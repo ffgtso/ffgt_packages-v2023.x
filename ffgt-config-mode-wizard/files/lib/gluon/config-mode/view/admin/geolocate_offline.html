@@ -71,7 +71,7 @@ end
 %>
     <p><%:To select which configuration your node should use, we need to know where it will be located.%></p>
 <%
-text = translate('As this node is offline, please go to <br>&nbsp;<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;%s<br>&nbsp;<br>to get the data you need to fill out below, with the PLACEHOLDERS replaced by numbers in English notation (e. g. "...&lat=53.456&lon=8.765"). You may find coordinates via the picker at our map, https://map.4830.org, OpenStreetMap, etc.')
+text = translate('As this node is offline, please go to <br>&nbsp;<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;%s<br>&nbsp;<br>to get the data you need to fill out below, with the PLACEHOLDERS replaced by numbers (e. g. '...&lat=53.456&lon=8.765'). You may find coordinates via the picker at our map (https://map.4830.org), OpenStreetMap, etc.')
 
 local url="http://setup.4830.org/geoloc.php?rgeo=reg&node=%s&lat=LATITUDE&lon=LONGITUDE"
 url=string.format(url, sysconfig.primary_mac)
