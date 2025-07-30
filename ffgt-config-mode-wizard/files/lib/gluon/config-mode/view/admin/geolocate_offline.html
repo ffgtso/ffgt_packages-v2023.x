@@ -16,6 +16,8 @@ local util = require 'gluon.util'
 local site = require 'gluon.site'
 local sysconfig = require 'gluon.sysconfig'
 local uci = require("simple-uci").cursor()
+local unistd = require 'posix.unistd'
+local crc32 = require('crc32')
 %>
 <h2><%:Geolocation%></h2>
 
@@ -36,6 +38,20 @@ if (lat == 51.892825) and (lon == 8.383708) then
 	lon=0
 end
 %><!-- Lat: <%=lat%> Lon: <%=lon%> Loc: <%=unlocode%> --><%
+
+if unistd.access('/tmp/geoloc.err') then
+	local file = assert(io.open('/tmp/geoloc.err', "r"))
+	local content = file:read("*all")
+	file:close()
+	os.remove('/tmp/geoloc.err')
+%>
+	<p class="error" style="text-align: justify;"><b><%:Error message found:%></b><br>
+<%
+	write(translate(content))
+%>
+	</p>
+<%
+end
 
 if (lat == 0) and (lon == 0) then %>
 	<p class="error" style="text-align: justify;"><%:No coordinates set and node is offline. We *need* a proper location to assign this node to a Freifunk network ("mesh", "hood", "community", ...).%></p>
@@ -108,7 +124,7 @@ write(text)
     </div>
 	<div class="gluon-section-node">
 		<div class="gluon-value">
-			<label class="gluon-value-title"><%:ADDR%></label>
+			<label class="gluon-value-title"><%:ADR%></label>
 			<div class="gluon-value-field"><input class="gluon-input-file" type="text" name="addr" value="<%=addr%>"/></div>
 		</div>
     </div>
@@ -128,6 +144,12 @@ write(text)
 		<div class="gluon-value">
 			<label class="gluon-value-title"><%:LOC%></label>
 			<div class="gluon-value-field"><input class="gluon-input-file" type="text" name="loc" value="<%=loctxt%>"/></div>
+		</div>
+    </div>
+	<div class="gluon-section-node">
+		<div class="gluon-value">
+			<label class="gluon-value-title"><%:HEX%></label>
+			<div class="gluon-value-field"><input class="gluon-input-file" type="text" name="hex" value="89abcdef"/></div>
 		</div>
     </div>
 

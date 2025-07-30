@@ -15,6 +15,7 @@ $Id$
 local util = require 'gluon.util'
 local site = require 'gluon.site'
 local uci = require("simple-uci").cursor()
+local unistd = require 'posix.unistd'
 %>
 <h2><%:Geolocation%></h2>
 
@@ -40,7 +41,19 @@ if autolocated then %>
 <%
 end
 
-
+if unistd.access('/tmp/geoloc.err') then
+    local file = assert(io.open('/tmp/geoloc.err', "r"))
+	local content = file:read("*all")
+    file:close()
+	os.remove('/tmp/geoloc.err')
+%>
+	<p class="error" style="text-align: justify;"><b><%:Error message found:%></b><br>
+<%
+	write(translate(content))
+%>
+	</p>
+<%
+end
 
 if (lat == 0) and (lon == 0) then %>
 	<p class="error" style="text-align: justify;"><%:No coordinates set; please add them or try the WiFi-based geolocation, which will upload the WiFi networks (SSID, BSSID, strenght, channel) to our server, which in turn will use third party services (Google, OpenStreetMap, ...) to map that to a location. We *need* a proper location to assign this node to a Freifunk network ("hood", "community", ...).%></p>
@@ -80,15 +93,16 @@ elseif rgeo_error then
 	<p>
 		<%:Please select where this node will be located at.%>
 	</p>
-<%	end %>
 <%
-	elseif not unlocode then %>
+	end
+elseif not unlocode then
+%>
 	<p class="error" style="text-align: justify;"><%:We could not map your coordinates to a location code. That is odd; does this node have Internet connectivity?%></p>
 	<p>
 		<%:Please double-check where this node will be located at.%>
 	</p>
 <%
-	else
+else
 		local addr = uci:get("gluon-node-info", location, "addr") or "FEHLER_ADDR"
 		local city = uci:get("gluon-node-info", location, "city") or "FEHLER_ORT"
 		local zip = uci:get("gluon-node-info", location, "zip") or "00000"
@@ -105,8 +119,9 @@ elseif rgeo_error then
 		<%:If neccessary, please update where this node will be located at.%>
 	</p>
 <%
-	end
-	if located==0 then
+end
+
+if located==0 then
 %>
     <p><%:To select which configuration your node should use, we need to know where it will be located.%></p>
 	<p><%:We will use OpenStreetMap data to convert the coordinates you enter below to a street address, which in turn will result in a location code (locode).%></p>
@@ -140,7 +155,9 @@ elseif rgeo_error then
 			</div>
 		</div>
 	</div>
-<%	end %>
+<%
+	end
+%>
 
 	<div class="gluon-page-actions right">
 		<input type="hidden" name="step" value="2" />

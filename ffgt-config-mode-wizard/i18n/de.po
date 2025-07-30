@@ -178,3 +178,18 @@ msgstr "Da dieser Knoten nicht online ist, gehe bitte auf die Seite <br>&nbsp;<b
 "&nbsp;<br>um die unten einzugebenen Daten zu berechnen. PLATZHALTER sind durch die korrekten Werte (mit Dezimalpunkt!) zu "
 "ersetzen, also z. B. so: '...&lat=53.456&lon=8.765'. Koordinaten kannst Du über unsere Karte (https://map.4830.org), "
 "OpenStreetMap oder ähnliche Dieste ermitteln."
+
+msgid "Geolocation failed, emtpy response from server."
+msgstr "Geolokalisierung fehlgeschlagen, leere Nachricht vom Server erhalten."
+
+msgid "Geolocation failed, no response from server."
+msgstr "Geolokalisierung fehlgeschlagen, keine Antwort vom Server erhalten."
+
+msgid "Geolocation impossible, empty input."
+msgstr "Geolokalisierung unmöglich bei leerer Eingabe."
+
+msgid "Error message found:"
+msgstr "Es gab eine Fehlermeldung:"
+
+msgid "Data error, checksum failure."
+msgstr "Prüfsummenfehler bei den eingegebenen Daten."

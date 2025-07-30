@@ -1,5 +1,8 @@
 #!/bin/sh
 
+if [ -e /tmp/geoloc.err ]; then
+ rm /tmp/geoloc.err
+fi
 isconfigured="$(sbin/uci get gluon-setup-mode.@setup_mode[0].configured 2>/dev/null)"
 if [ "$isconfigured" != "1" ]; then
  isconfigured=0
@@ -47,7 +50,19 @@ if [ "X${curlat}" != "X" -a "X${curlon}" != "X" ]; then
       fi
     fi
     /usr/bin/gluon-reconfigure ||:
+   else
+    echo "Geolocation failed, unknown locode \"${newsitecode}\"." >/tmp/geoloc.err
+    logger "$0: Geolocation failed, unknown locode \"${newsitecode}\"."
    fi
+  else
+   echo "Geolocation failed, emtpy response from server." >/tmp/geoloc.err
+   logger "$0: Geolocation failed, emtpy response from server."
   fi
+ else
+  echo "Geolocation failed, no response from server." >/tmp/geoloc.err
+  logger "$0: Geolocation failed, no response from server."
  fi
+else
+ echo "Geolocation impossible, empty input." >/tmp/geoloc.err
+ logger "$0: Geolocation impossible, empty input."
 fi
