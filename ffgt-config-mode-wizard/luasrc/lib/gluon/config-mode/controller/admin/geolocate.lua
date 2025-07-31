@@ -17,6 +17,8 @@ local uci = require("simple-uci").cursor()
 local unistd = require 'posix.unistd'
 local log = require 'posix.syslog'
 local sysconfig = require 'gluon.sysconfig'
+local crc32 = require 'crc32'
+local md5 = require 'md5'
 
 local function trim(s)
   if not s then
@@ -26,25 +28,25 @@ local function trim(s)
 end
 
 local function sanitize_name(s)
-	s = s:gsub("/","-")
-	s = s:gsub("&","und")
-	s = s:gsub("+","und")
-	s = s:gsub(";","-")
-	s = s:gsub("'","")
-	s = s:gsub("(","")
-	s = s:gsub(")","")
-	s = s:gsub("*","")
-    s = s:sub("%p","-")
-    s = s:gsub("_","-")
-    s = s:gsub("ä","ae")
-    s = s:gsub("ö","oe")
-    s = s:gsub("ü","ue")
-    s = s:gsub("ß","sz")
-    s = s:gsub("Ä","Ae")
-    s = s:gsub("Ö","Oe")
-    s = s:gsub("Ü","Ue")
-    s = s:gsub("$","")
-    s = s:gsub("%-%-","-")
+--    s = s:gsub("/", "-")
+--    s = s:gsub("&", "und")
+--    s = s:gsub("+", "und")
+--    s = s:gsub(";", "-")
+--    s = s:gsub("'", "")
+--    s = s:gsub("(", "")
+--    s = s:gsub(")", "")
+--    s = s:gsub("*", "")
+--    s = s:gsub("%p", "-")
+--    s = s:gsub("_", "-")
+--    s = s:gsub("ä", "ae")
+--    s = s:gsub("ö", "oe")
+--    s = s:gsub("ü", "ue")
+--    s = s:gsub("ß", "sz")
+--    s = s:gsub("Ä", "Ae")
+--    s = s:gsub("Ö", "Oe")
+--    s = s:gsub("Ü", "Ue")
+--    s = s:gsub("$", "")
+--    s = s:gsub("%-%-", "-")
     return s
 end
 
@@ -101,16 +103,19 @@ local function action_geoloc(http, renderer)
                 local newcity = sanitize_name(trim(http:formvalue("city")))
                 local newzip = sanitize_name(tonumber(trim(http:formvalue("zip") or "0000")))
                 local newloc = sanitize_name(trim(http:formvalue("loc")))
-                local newcrc = sanitize_name(trim(http:formvalue("hex")))
+                local newhex = sanitize_name(trim(http:formvalue("hex")))
 
-                log.syslog(log.LOG_INFO, newaddr .. ", " .. newcity .. ", " .. newzip .. ", " .. newloc .. newcrc)
+                log.syslog(log.LOG_INFO, newaddr .. ", " .. newcity .. ", " .. newzip .. ", " .. newloc .. newhex)
 
-                local mystring = "MAC: " .. sysconfig.primary_mac .. "\nLAT: " .. newlat .. "\nLON: " .. newlon .. "\nADR: " .. newadr .. "\CTY: " .. newcity .. "\nZIP: " .. newzip .. "\nLOC: " .. newloc .. "\n"
-                local crchash = string.format("%08x", crc32.hash(mystring))
+                local mystring = sysconfig.primary_mac .. newlat .. newlon .. newaddr .. newcity .. newzip .. newloc
+                local cmdstr=string.format("echo %c%s%c | md5sum", 39, mystring, 39)
+                local pipe = io.popen(cmdstr)
+                local hash = pipe:read("*a")
+                pipe:close()
+                hash = string.format("%.8s", hash)
+                log.syslog(log.LOG_INFO, "Entered/computed hash: " .. newhex .. "/" .. hash)
 
-                log.syslog(log.LOG_INFO, "Entered/computed hash: " .. newcrc .. "/" .. crchash)
-
-                if newcrc == crchash then
+                if newhex == hash then
                     if newloc then
                         location = uci:get_first("gluon-node-info", "location")
                         uci:set("gluon-node-info", location, "latitude", newlat)
@@ -132,7 +137,7 @@ local function action_geoloc(http, renderer)
                 else
                 	local file = assert(io.open('/tmp/geoloc.err', "w"))
                     file:write("Data error, checksum failure.")
-                	file.close()
+                	file:close()
             	    renderer.render_layout('admin/geolocate_offline', { null_coords = (lat == 0 and lon == 0), }, 'ffgt-config-mode-wizard')
                 end
             else
