@@ -17,8 +17,6 @@ local uci = require("simple-uci").cursor()
 local unistd = require 'posix.unistd'
 local log = require 'posix.syslog'
 local sysconfig = require 'gluon.sysconfig'
-local crc32 = require 'crc32'
-local md5 = require 'md5'
 
 local function trim(s)
   if not s then
