@@ -77,10 +77,10 @@ if [ "$(uci get autoupdater.stable.mirror | grep freifunk-lippe.de >/dev/null ; 
    domain="mns"
   fi
   # Reg.bez. Arnsberg
-  #if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 50.72081 & $1 < 51.74574) && ($2 > 7.06009 && $2 < 8.97995)) {printf("true");}}')" = "true" ]; then
-  # echo "Geolocation based migration moves node $hostname at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
-  # domain="mns"
-  #fi
+  if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 50.72081 & $1 < 51.74574) && ($2 > 7.06009 && $2 < 8.97995)) {printf("true");}}')" = "true" ]; then
+   echo "Geolocation based migration moves node $hostname at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
+   domain="mns"
+  fi
  fi
  if [ "$(echo $hostname | grep '^SPK-PB-DT-HX' >/dev/null ; echo $?)" = "0" ]; then
   if [ "${domain}" != "xx8" ]; then
