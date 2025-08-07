@@ -1,18 +1,35 @@
 #!/bin/sh
 
+hostname="$(pretty-hostname | sed -e 's/"/-/g')"
+hostname="$(echo -n "${hostname}" | sed -r -e 's/ä/ae/g' -e 's/ö/oe/g' -e 's/ü/ue/g' -e 's/ß/sz/g' -e 's/Ä/Ae/g' -e 's/Ö/Oe/g' -e 's/Ü/Ue/g')"
+hostname="$(echo -n "${hostname}" | sed -r -e 's/e\. V\./eV/g' -e 's/e\.V\./eV/g')"
+hostname="$(echo -n "${hostname}" | sed -r -e 's/[^a-zA-Z0-9-]/-/g')"
+hostname="$(echo -n "${hostname}" | sed -r -e 's/-+/-/g' -e 's/^-//')"
+hostname="$(echo -n "${hostname}" | sed -r -e 's/Evangelisch-reformierte/Ev-ref/g')"
+hostname="$(echo -n "${hostname}" | sed -r -e 's/^ff-anroechte//g')"
+hostname="$(echo -n "${hostname}" | sed -r -e 's/^fflip-Moehne/Moehne/gi')"
+hostname="$(echo -n "${hostname}" | sed -r -e 's/strasze/str/g' -e 's/strasse/str/g')"
+hostname="$(echo -n "${hostname}" | sed -r -e 's/Strasze/Str/g' -e 's/Strasse/Str/g')"
+hostname="${hostname:0:42}"
+hostname="$(echo -n "${hostname}" | sed -e 's/-$//' -e 's/^-//')"
+if [ "$(pretty-hostname)" != "${hostname}" ]; then
+  if [ "X${hostname}" = "X" ]; then
+    mac="$(echo -e "local util = require 'gluon.util'\nlocal mac=string.sub(util.node_id(), 9);\nprint(mac);" | /usr/bin/lua)"
+    if [ "${mac}X" = "X" ]; then
+      mac="no-mac"
+    fi
+    hostname="unparsable-hostname-${mac}"
+  fi
+  logger "Changed hostname from $(pretty-hostname) to ${hostname}."
+  pretty-hostname "${hostname}"
+fi
+
 if [ "$(uci get autoupdater.stable.mirror | grep firmware.*4830.org >/dev/null ; echo $?)" = "0" ]; then
  logger "4830.org FW detected! Move on, nothing to see here!"
  exit 0
 fi
 
 echo "$0 start." | tee -a /root/multidomain-migration.log
-
-hostname="$(pretty-hostname | sed -e 's/"/-/g')"
-hostname="$(echo -n "$hostname" | sed -r -e 's/ä/ae/g' -e 's/ö/oe/g' -e 's/ü/ue/g' -e 's/ß/sz/g' -e 's/Ä/Ae/g' -e 's/Ö/Oe/g' -e 's/Ü/Ue/g')"
-hostname="$(echo -n "$hostname" | sed -r -e 's/[^a-zA-Z0-9-]/-/g')"
-hostname="$(echo -n "$hostname" | sed -r -e 's/-+/-/g' -e 's/^-//')"
-hostname="${hostname:0:63}"
-hostname="$(echo -n "$hostname" | sed -e 's/-$//')"
 
 curdom="$(uci get gluon.core.domain 2>/dev/null ||:)"
 domain="${curdom}"
@@ -53,44 +70,44 @@ if [ "$(uci get autoupdater.stable.mirror | grep freifunk-lippe.de >/dev/null ; 
  if [ "$lat" != "0.00" -a "$lon" != "0.00" ]; then
   # Soest
   if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.52412 && $1 < 51.62953) && ($2 > 7.97157 && $2 < 8.18361)) {printf("true");}}')" = "true" ]; then
-   echo "Geolocation based migration moves node $hostname at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
+   echo "Geolocation based migration moves node ${hostname} at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
    domain="mns"
   fi
   # Möhnesee
   if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.41955 && $1 < 51.53651) && ($2 > 8.00611 && $2 < 8.23786)) {printf("true");}}')" = "true" ]; then
-   echo "Geolocation based migration moves node $hostname at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
+   echo "Geolocation based migration moves node ${hostname} at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
    domain="mns"
   fi
   # Wickede
   if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.48801 && $1 < 51.51323) && ($2 > 7.84540 && $2 < 7.88788)) {printf("true");}}')" = "true" ]; then
-   echo "Geolocation based migration moves node $hostname at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
+   echo "Geolocation based migration moves node ${hostname} at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
    domain="mns"
   fi
   # Werl
   if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.50447 && $1 < 51.60075) && ($2 > 7.81832 && $2 < 8.00440)) {printf("true");}}')" = "true" ]; then
-   echo "Geolocation based migration moves node $hostname at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
+   echo "Geolocation based migration moves node ${hostname} at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
    domain="mns"
   fi
   # Hamm
   if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.57963 & $1 < 51.75849) && ($2 > 7.65266 && $2 < 8.01109)) {printf("true");}}')" = "true" ]; then
-   echo "Geolocation based migration moves node $hostname at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
+   echo "Geolocation based migration moves node ${hostname} at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
    domain="mns"
   fi
   # Reg.bez. Arnsberg
   if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 50.72081 & $1 < 51.74574) && ($2 > 7.06009 && $2 < 8.97995)) {printf("true");}}')" = "true" ]; then
-   echo "Geolocation based migration moves node $hostname at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
+   echo "Geolocation based migration moves node ${hostname} at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
    domain="mns"
   fi
  fi
- if [ "$(echo $hostname | grep '^SPK-PB-DT-HX' >/dev/null ; echo $?)" = "0" ]; then
+ if [ "$(echo ${hostname} | grep '^SPK-PB-DT-HX' >/dev/null ; echo $?)" = "0" ]; then
   if [ "${domain}" != "xx8" ]; then
-   echo "Name based migration moves node $hostname from ${domain} to 4830.org's xx8 ..." | tee -a /root/multidomain-migration.log
+   echo "Name based migration moves node ${hostname} from ${domain} to 4830.org's xx8 ..." | tee -a /root/multidomain-migration.log
    domain="xx8"
   fi
  fi
- if [ "$(echo $hostname | grep -- '-krvw$' >/dev/null ; echo $?)" = "0" ]; then
+ if [ "$(echo ${hostname} | grep -- '-krvw$' >/dev/null ; echo $?)" = "0" ]; then
   if [ "${domain}" != "xx7" ]; then
-   echo "Name based migration moves node $hostname from ${domain} to 4830.org's xx7 ..." | tee -a /root/multidomain-migration.log
+   echo "Name based migration moves node ${hostname} from ${domain} to 4830.org's xx7 ..." | tee -a /root/multidomain-migration.log
    domain="xx7"
   fi
  fi
