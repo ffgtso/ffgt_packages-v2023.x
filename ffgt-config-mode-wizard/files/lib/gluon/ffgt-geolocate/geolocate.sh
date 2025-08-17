@@ -8,7 +8,7 @@ if [ ! -e $IW ]; then
 fi
 export IW
 
-WLANDEV="$(${IW} dev | /usr/bin/awk 'BEGIN{idx=1;} /Interface client/ {iface[idx]=$2; ifacemap[$2]=idx; idx++}; END{for(i=1; i<idx; i++) {printf("%s ", iface[i]);}}')"
+WLANDEV="$(${IW} dev | /usr/bin/awk 'BEGIN{idx=1;} /Interface client/ {iface[idx]=$2; ifacemap[$2]=idx; idx++};  /Interface wlan/ {iface[idx]=$2; ifacemap[$2]=idx; idx++}; END{for(i=1; i<idx; i++) {printf("%s ", iface[i]);}}')"
 if [ "X${WLANDEV}" = "X" ]; then
  echo "$0: no WiFi device detected"
  logger "$0: no WiFi device detected"
@@ -44,7 +44,6 @@ if [ ${runnow} -eq 1 ]; then
  fi
 
  mac=`/sbin/uci get network.bat0.macaddr`
- # FIXME. On multiband devices, check wlan1 as well!
  for dev in ${WLANDEV}
  do
   ${IW} dev ${dev} scan >/dev/null 2>&1
@@ -81,9 +80,10 @@ if [ ${runnow} -eq 1 ]; then
     /bin/sh /tmp/geoloc.sh
     if [ $isconfigured -ne 1 ]; then
      loc="`/sbin/uci get gluon-node-info.@location[0].locode 2>/dev/null`"
+     zip="`/sbin/uci get gluon-node-info.@location[0].zip 2>/dev/null`"
      adr="`/sbin/uci get gluon-node-info.@location[0].addr 2>/dev/null`"
-     if [ "x${loc}" != "x" -a "x${adr}" != "x" ]; then
-      hostname="${loc}-${adr}"
+     if [ "x${zip}" != "x" -a "x${adr}" != "x" ]; then
+      hostname="${zip}-${adr}"
       /sbin/uci set system.@system[0].hostname="${hostname}"
       /sbin/uci commit system
      fi
