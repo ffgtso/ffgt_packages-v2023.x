@@ -79,12 +79,13 @@ if [ ${runnow} -eq 1 ]; then
     /usr/bin/awk </tmp/geoloc.out '/^LAT:/ {printf("/sbin/uci set gluon-node-info.@location[0].latitude=%s\n", $2);} /^LON:/ {printf("/sbin/uci set gluon-node-info.@location[0].longitude=%s\n", $2);} /^ADR:/ {printf("/sbin/uci set gluon-node-info.@location[0].addr=%c%s%c\n", 39, $2, 39);} /^CTY:/ {printf("/sbin/uci set gluon-node-info.@location[0].city=%s\n", $2);} /^ZIP:/ {printf("/sbin/uci set gluon-node-info.@location[0].zip=%s\n", $2);} /^LOC:/ {printf("/sbin/uci set gluon-node-info.@location[0].locode=%s\n", $2);} END{printf("/sbin/uci commit gluon-node-info\n");}' >>/tmp/geoloc.sh
     /bin/sh /tmp/geoloc.sh
     if [ $isconfigured -ne 1 ]; then
+     suffix=$(echo "util=require 'gluon.util' print(string.format('%s', string.sub(util.node_id(), 9)))" | /usr/bin/lua)
      loc="`/sbin/uci get gluon-node-info.@location[0].locode 2>/dev/null`"
      zip="`/sbin/uci get gluon-node-info.@location[0].zip 2>/dev/null`"
      adr="`/sbin/uci get gluon-node-info.@location[0].addr 2>/dev/null`"
      if [ "x${zip}" != "x" -a "x${adr}" != "x" ]; then
-      hostname="${zip}-${adr}"
-      /sbin/uci set system.@system[0].hostname="${hostname}"
+      hostname="$(printf "%.31s" "${zip}-${adr}")"
+      /sbin/uci set system.@system[0].hostname="${hostname}-${suffix}"
       /sbin/uci commit system
      fi
     fi
