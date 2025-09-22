@@ -1,6 +1,30 @@
 #!/bin/sh
 
+echo "$0 start." | tee -a /root/multidomain-migration.log
+
+is_configured="$(uci get gluon-setup-mode.@setup_mode[0].configured 2>/dev/null || echo 0)"
+if [ "${is_configured}" != "1" ]; then
+ echo "Skipping run on unconfigured node!" | tee -a /root/multidomain-migration.log
+ logger "Skipping run on unconfigured node!"
+ exit 0
+fi
+
+if [ -e /tmp/ffX-to-4830.lock ]; then
+ echo "$0 already running, skipping ..." | tee -a /root/multidomain-migration.log
+ exit 0
+else
+ touch /tmp/ffX-to-4830.lock
+fi
+
+# mns_phase: what shall this code do with mns nodes?
+# 1: move mns-nodes to firmware branch mns
+# 2: if firmware branch is mns, switch to stable and change mesh to propper locode
+
+mns_phase=1
+delayed_reconf=0
+
 hostname="$(pretty-hostname | sed -e 's/"/-/g')"
+hostname="$(echo -n "${hostname}" | sed -r -e 's/\xE4/ae/g' -e 's/\xF6/oe/g' -e 's/\xFC/ue/g' -e 's/\xDF/sz/g' -e 's/\xC4/Ae/g' -e 's/\xD6/Oe/g' -e 's/\xDC/Ue/g')"
 hostname="$(echo -n "${hostname}" | sed -r -e 's/ä/ae/g' -e 's/ö/oe/g' -e 's/ü/ue/g' -e 's/ß/sz/g' -e 's/Ä/Ae/g' -e 's/Ö/Oe/g' -e 's/Ü/Ue/g')"
 hostname="$(echo -n "${hostname}" | sed -r -e 's/e\. V\./eV/g' -e 's/e\.V\./eV/g')"
 hostname="$(echo -n "${hostname}" | sed -r -e 's/[^a-zA-Z0-9-]/-/g')"
@@ -13,35 +37,41 @@ hostname="$(echo -n "${hostname}" | sed -r -e 's/Strasze/Str/g' -e 's/Strasse/St
 hostname="${hostname:0:42}"
 hostname="$(echo -n "${hostname}" | sed -e 's/-$//' -e 's/^-//')"
 if [ "$(pretty-hostname)" != "${hostname}" ]; then
-  if [ "X${hostname}" = "X" ]; then
-    mac="$(echo -e "local util = require 'gluon.util'\nlocal mac=string.sub(util.node_id(), 9);\nprint(mac);" | /usr/bin/lua)"
-    if [ "${mac}X" = "X" ]; then
-      mac="no-mac"
-    fi
-    hostname="unparsable-hostname-${mac}"
+ if [ "X${hostname}" = "X" ]; then
+  mac="$(echo -e "local util = require 'gluon.util'\nlocal mac=string.sub(util.node_id(), 9);\nprint(mac);" | /usr/bin/lua)"
+  if [ "${mac}X" = "X" ]; then
+   mac="no-mac"
   fi
-  logger "Changed hostname from $(pretty-hostname) to ${hostname}."
-  pretty-hostname "${hostname}"
+  hostname="unparsable-hostname-${mac}"
+ fi
+ logger "Changed hostname from $(pretty-hostname) to ${hostname}."
+ echo "Changed hostname from $(pretty-hostname) to ${hostname}." | tee -a /root/multidomain-migration.log
+ pretty-hostname "${hostname}"
+fi
+
+if [ ${mns_phase} -eq 2 ]; then
+ # Temporary branch for Möhnesee: delayed reconfiguation to new mesh.
+ branch=$(uci get autoupdater.settings.branch)
+ if [ "${branch}" == "mns" ]; then
+  delayed_reconf=1
+  logger "4830.org in mns branch detected! Doing delayed reconfiguration."
+  echo "4830.org in mns branch detected! Doing delayed reconfiguration." | tee -a /root/multidomain-migration.log
+ fi
 fi
 
 if [ "$(uci get autoupdater.stable.mirror | grep firmware.*4830.org >/dev/null ; echo $?)" = "0" ]; then
- logger "4830.org FW detected! Move on, nothing to see here!"
- exit 0
+ if [ ${delayed_reconf} -eq 0 ]; then
+  logger "4830.org FW detected! Move on, nothing to see here!"
+  echo "4830.org FW detected! Move on, nothing to see here!" | tee -a /root/multidomain-migration.log
+  rm /tmp/ffX-to-4830.lock
+  exit 0
+ fi
 fi
-
-echo "$0 start." | tee -a /root/multidomain-migration.log
 
 curdom="$(uci get gluon.core.domain 2>/dev/null ||:)"
 domain="${curdom}"
 if [ "X${domain}" = "X" ]; then
  domain="zzz"
-fi
-
-if [ -e /tmp/ffX-to-4830.lock ]; then
- echo "$0 already running, skipping ..." | tee -a /root/multidomain-migration.log
- exit 0
-else
- touch /tmp/ffX-to-4830.lock
 fi
 
 if [ "$(uci get autoupdater.stable.mirror | grep freifunk-lippe.de >/dev/null ; echo $?)" = "0" ]; then
@@ -50,11 +80,11 @@ if [ "$(uci get autoupdater.stable.mirror | grep freifunk-lippe.de >/dev/null ; 
  # FIXUPs
  for file in 550-rsk-config 888-button-bind
  do
-   if [ -e /lib/gluon/upgrade/${file} ]; then
-     echo -e "#!/bin/sh\nexit 0" >/lib/gluon/upgrade/${file} ||:
-     chmod +x /lib/gluon/upgrade/${file} ||:
-     echo "${file}" >> /tmp/need-upgrade-fixup
-   fi
+  if [ -e /lib/gluon/upgrade/${file} ]; then
+   echo -e "#!/bin/sh\nexit 0" >/lib/gluon/upgrade/${file} ||:
+   chmod +x /lib/gluon/upgrade/${file} ||:
+   echo "${file}" >> /tmp/need-upgrade-fixup
+  fi
  done
  if [ -h /etc/profile ]; then
   rm /etc/profile && cp -p /rom/etc/profile /etc/profile
@@ -65,60 +95,39 @@ if [ "$(uci get autoupdater.stable.mirror | grep freifunk-lippe.de >/dev/null ; 
  if [ ! -e /lib/gluon/domains/${domain}.json ]; then
   domain="lem"
  fi
+ targetlocode="$(/lib/gluon/ffgt-geolocate/is_mns.sh)"
+ if [ "${targetlocode}" = "mns" ]; then
+  uci set autoupdater.settings.branch='mns'
+  uci commit autoupdater
+  echo "Moved mns node to autoupdate branch mns." | tee -a /root/multidomain-migration.log
+ fi
  lat=$(uci get gluon-node-info.@location[0].latitude 2>/dev/null || echo "0.00")
  lon=$(uci get gluon-node-info.@location[0].longitude 2>/dev/null || echo "0.00")
- if [ "$lat" != "0.00" -a "$lon" != "0.00" ]; then
-  # Soest
-  if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.52412 && $1 < 51.62953) && ($2 > 7.97157 && $2 < 8.18361)) {printf("true");}}')" = "true" ]; then
-   echo "Geolocation based migration moves node ${hostname} at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
-   domain="mns"
-  fi
-  # Möhnesee
-  if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.41955 && $1 < 51.53651) && ($2 > 8.00611 && $2 < 8.23786)) {printf("true");}}')" = "true" ]; then
-   echo "Geolocation based migration moves node ${hostname} at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
-   domain="mns"
-  fi
-  # Wickede
-  if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.48801 && $1 < 51.51323) && ($2 > 7.84540 && $2 < 7.88788)) {printf("true");}}')" = "true" ]; then
-   echo "Geolocation based migration moves node ${hostname} at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
-   domain="mns"
-  fi
-  # Werl
-  if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.50447 && $1 < 51.60075) && ($2 > 7.81832 && $2 < 8.00440)) {printf("true");}}')" = "true" ]; then
-   echo "Geolocation based migration moves node ${hostname} at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
-   domain="mns"
-  fi
-  # Hamm
-  if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.57963 && $1 < 51.75849) && ($2 > 7.65266 && $2 < 8.01109)) {printf("true");}}')" = "true" ]; then
-   echo "Geolocation based migration moves node ${hostname} at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
-   domain="mns"
-  fi
-  # Reg.bez. Arnsberg
-  if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 50.72081 && $1 < 51.74574) && ($2 > 7.06009 && $2 < 8.97995)) {printf("true");}}')" = "true" ]; then
-   echo "Geolocation based migration moves node ${hostname} at ($lat;$lon) from ${domain} to 4830.org's mns ..." | tee -a /root/multidomain-migration.log
-   domain="mns"
-  fi
- fi
- if [ "$(echo ${hostname} | grep '^SPK-PB-DT-HX' >/dev/null ; echo $?)" = "0" ]; then
-  if [ "${domain}" != "xx8" ]; then
-   echo "Name based migration moves node ${hostname} from ${domain} to 4830.org's xx8 ..." | tee -a /root/multidomain-migration.log
-   domain="xx8"
-  fi
- fi
- if [ "$(echo ${hostname} | grep -- '-krvw$' >/dev/null ; echo $?)" = "0" ]; then
-  if [ "${domain}" != "xx7" ]; then
-   echo "Name based migration moves node ${hostname} from ${domain} to 4830.org's xx7 ..." | tee -a /root/multidomain-migration.log
-   domain="xx7"
-  fi
+ if [ "${lat}" = "0.00" -o "${lon}" = "0.00" ]; then
+  echo "Started WiFi-based location gathering in the backgroud due to missing coordinates." | tee -a /root/multidomain-migration.log
+  ((sleep 150 ; /lib/gluon/ffgt-geolocate/geolocate-lite.sh force ; uci set gluon-node-info.@location[0].share_location=0 ; echo >>/root/multidomain-migration.log "Geolocation results:" ; cat /tmp/geoloc.out >>/root/multidomain-migration.log) &)
  fi
  echo "Migrating FFLIP-FW, mesh ${olddom}, to 4830.org's ${domain} ..." | tee -a /root/multidomain-migration.log
+elif [ ${delayed_reconf} -eq 1 ]; then
+ echo "Delayed migration of FFLIP-FW, Möhnesee reconfiguraion ..." | tee -a /root/multidomain-migration.log
+  uci set autoupdater.settings.branch='stable'
+  uci commit autoupdater
+
+  domain="$(/lib/gluon/ffgt-geolocate/is_mns.sh)"
+  lat=$(uci get gluon-node-info.@location[0].latitude 2>/dev/null || echo "0.00")
+  lon=$(uci get gluon-node-info.@location[0].longitude 2>/dev/null || echo "0.00")
+  echo "Geolocation based migration moves node ${hostname} at ($lat;$lon) from ${olddom} to 4830.org's ${domain} ..." | tee -a /root/multidomain-migration.log
 else
  echo "Migrating alien FW to 4830.org FW ..." | tee -a /root/multidomain-migration.log
+
+ domain=$(uci get gluon.core.domain)
 
  # FIXUP
  if [ -h /etc/profile ]; then
   rm /etc/profile && cp -p /rom/etc/profile /etc/profile
  fi
+
+ echo "Moving alien setup from ${domain} ..." | tee -a /root/multidomain-migration.log
 fi
 
 if [ ! -e /lib/gluon/domains/${domain}.json ]; then
@@ -126,7 +135,7 @@ if [ ! -e /lib/gluon/domains/${domain}.json ]; then
  domain="zzz"
 fi
 
-echo "Selected Domain: ${domain}." | tee -a /root/multidomain-migration.log
+echo "Selected Mesh: ${domain}." | tee -a /root/multidomain-migration.log
 
 if [ "${curdom}" != "${domain}" ]; then
  echo "Setting domain: ${domain}." | tee -a /root/multidomain-migration.log

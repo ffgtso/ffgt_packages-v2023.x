@@ -29,7 +29,6 @@ endef
 
 define Package/ffX-migrate-to-4830/install
 	$(CP) ./files/* $(1)/
-	iconv -f utf-8 -t iso-8859-15 <./files/lib/gluon/upgrade/003-ffX-to-4830 >$(1)/lib/gluon/upgrade/003-ffX-to-4830
 endef
 
 $(eval $(call BuildPackage,$(PKG_NAME)))
