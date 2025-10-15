@@ -33,3 +33,16 @@ if [ $RC -eq 0 ]; then
     uci commit system
   fi
 fi
+
+if [ -e /lib/gluon/hostname-remapping.txt ]; then
+  for i in $(cat /lib/gluon/hostname-remapping.txt)
+  do
+    left=$(echo $i|cut -d ';' -f 1)
+    right=$(echo $i|cut -d ';' -f 2)
+    if [ "${HOSTNAME}" = "${left}" ]; then
+      uci set system.@system[0].hostname="${right}"
+      uci commit system
+      pretty-hostname "${right}"
+    fi
+  done
+fi
