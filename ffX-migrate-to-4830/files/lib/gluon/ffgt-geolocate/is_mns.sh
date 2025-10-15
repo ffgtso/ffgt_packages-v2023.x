@@ -10,28 +10,16 @@ fi
 targetlocode="zzz"
 
 if [ "$lat" != "0.00" -a "$lon" != "0.00" ]; then
- # Soest
- if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.52412 && $1 < 51.62953) && ($2 > 7.97157 && $2 < 8.18361)) {printf("true");}}')" = "true" ]; then
-  targetlocode="mns"
+ # "Südwestfalen-Lippe"
+ if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.480527645 && $1 < 51.776337691) && ($2 > 7.129440308 && $2 < 8.588218689)) {printf("true");}}')" = "true" ]; then
+  targetlocode="0sw"
+ fi
+ # Kierspe
+ if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.104384245 && $1 < 51.333614775) && ($2 > 7.495422363 && $2 < 7.982940674)) {printf("true");}}')" = "true" ]; then
+  targetlocode="kse"
  fi
  # Möhnesee
- if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.41955 && $1 < 51.53651) && ($2 > 8.00611 && $2 < 8.23786)) {printf("true");}}')" = "true" ]; then
-  targetlocode="mns"
- fi
- # Wickede
- if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.48801 && $1 < 51.51323) && ($2 > 7.84540 && $2 < 7.88788)) {printf("true");}}')" = "true" ]; then
-  targetlocode="mns"
- fi
- # Werl
- if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.50447 && $1 < 51.60075) && ($2 > 7.81832 && $2 < 8.00440)) {printf("true");}}')" = "true" ]; then
-  targetlocode="mns"
- fi
- # Hamm
- if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.57963 && $1 < 51.75849) && ($2 > 7.65266 && $2 < 8.01109)) {printf("true");}}')" = "true" ]; then
-  targetlocode="mns"
- fi
- # Reg.bez. Arnsberg
- if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 50.72081 && $1 < 51.74574) && ($2 > 7.06009 && $2 < 8.97995)) {printf("true");}}')" = "true" ]; then
+ if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.460210721 && $1 < 51.503613792) && ($2 > 8.038215637 && $2 < 8.210906982)) {printf("true");}}')" = "true" ]; then
   targetlocode="mns"
  fi
 fi
