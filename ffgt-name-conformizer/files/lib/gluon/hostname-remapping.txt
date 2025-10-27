@@ -68,6 +68,8 @@
 "Moehnesee-Pfefferm-hle-Betriebsraum";"Moehnesee-Pfeffermuehle-Betriebsraum"
 "Moehnesee-Rocco-gegen-ber-Theke";"Moehnesee-Rocco-gegenueber-Theke"
 "Neue-Torstra-e-104";"Neue-Torstrasze-104"
+"Obermarktstra-e-001";"Obermarktstrasze-001"
+"Obermarktstra-e-Behutsam";"Obermarktstrasze-Behutsam"
 "Rathaus-Lange-Stra-e";"Rathaus-Lange-Strasze"
 "RB-D-rentrup-krvw";"RB-Doerentrup-krvw"
 "Stadtb-cherei-2-Bad-Salzuflen";"Stadtbuecherei-2-Bad-Salzuflen"
