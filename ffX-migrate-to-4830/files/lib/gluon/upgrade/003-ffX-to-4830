@@ -119,13 +119,13 @@ if [ "$(uci get autoupdater.stable.mirror | grep freifunk-lippe.de >/dev/null ; 
  echo "Migrating FFLIP-FW, mesh ${olddom}, to 4830.org's ${domain} ..." | tee -a /root/multidomain-migration.log
 elif [ ${delayed_reconf} -eq 1 ]; then
  echo "Delayed migration of FFLIP-FW, Möhnesee reconfiguraion ..." | tee -a /root/multidomain-migration.log
-  uci set autoupdater.settings.branch='stable'
-  uci commit autoupdater
+ uci set autoupdater.settings.branch='stable'
+ uci commit autoupdater
 
-  domain="$(/lib/gluon/ffgt-geolocate/is_mns.sh)"
-  lat=$(uci get gluon-node-info.@location[0].latitude 2>/dev/null || echo "0.00")
-  lon=$(uci get gluon-node-info.@location[0].longitude 2>/dev/null || echo "0.00")
-  echo "Geolocation based migration moves node ${hostname} at ($lat;$lon) from ${olddom} to 4830.org's ${domain} ..." | tee -a /root/multidomain-migration.log
+ domain="$(/lib/gluon/ffgt-geolocate/is_mns.sh)"
+ lat=$(uci get gluon-node-info.@location[0].latitude 2>/dev/null || echo "0.00")
+ lon=$(uci get gluon-node-info.@location[0].longitude 2>/dev/null || echo "0.00")
+ echo "Geolocation based migration moves node ${hostname} at ($lat;$lon) from ${olddom} to 4830.org's ${domain} ..." | tee -a /root/multidomain-migration.log
 else
  echo "Migrating alien FW to 4830.org FW ..." | tee -a /root/multidomain-migration.log
 
