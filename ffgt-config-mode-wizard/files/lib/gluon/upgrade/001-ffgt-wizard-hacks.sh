@@ -31,6 +31,14 @@ if [ -e /lib/gluon/config-mode/wizard-ffgt ]; then
   done
 fi
 
+# Cleanup
+for i in 0100-hostname.lua 0400-geo-location.lua 0500-contact-info.lua
+do
+  if [ -e /lib/gluon/config-mode/wizard/$i ]; then
+    /bin/rm /lib/gluon/config-mode/wizard/$i ||:
+  fi
+done
+
 if [ -e /lib/gluon/config-mode/reboot-ffgt ]; then
   mv /lib/gluon/config-mode/reboot /lib/gluon/config-mode/reboot-dist ||:
   mv /lib/gluon/config-mode/reboot-ffgt /lib/gluon/config-mode/reboot ||:
