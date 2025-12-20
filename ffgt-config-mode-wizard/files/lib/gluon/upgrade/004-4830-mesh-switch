@@ -1,0 +1,15 @@
+#!/usr/bin/lua
+
+local site = require 'gluon.site'
+
+local cronfile = "/usr/lib/micron.d/4830-mesh-switch"
+
+math.randomseed(os.clock()*100000000000)
+math.random()
+math.random()
+math.random()
+local minute=math.random(0, 59)
+
+local f = io.open(cronfile, "w")
+f:write(string.format("%d * * * *  /lib/gluon/ffgt-geolocate/4830-mesh-switch.sh\n", minute))
+f:close()
