@@ -4,7 +4,7 @@ local site = require 'gluon.site'
 
 local cronfile = "/usr/lib/micron.d/4830-mesh-switch"
 
-math.randomseed(os.clock()*100000000000)
+math.randomseed(os.time())
 math.random()
 math.random()
 math.random()
