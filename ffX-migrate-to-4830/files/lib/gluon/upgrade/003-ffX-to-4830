@@ -171,6 +171,8 @@ if [ "${curdom}" != "${domain}" ]; then
  echo "Setting domain: ${domain}." | tee -a /root/multidomain-migration.log
  uci set gluon.core.domain="${domain}" ||:
  uci commit gluon ||:
+ uci set gluon-node-info.@location[0].locode="${domain}" ||:
+ uci commit gluon-node-info ||:
  #echo "Will run 'gluon-reconfigure 2>&1' later" | tee -a /root/multidomain-migration.log
  #touch /tmp/need-gluon-reconfigure
  gluon-reconfigure 2>&1 | tee /root/migration-gluon-reconfigure.log

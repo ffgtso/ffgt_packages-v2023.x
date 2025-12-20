@@ -5,8 +5,16 @@
 
 locode="$(/sbin/uci get gluon-node-info.@location[0].locode 2>/dev/null)"
 if [ "x${locode}" == "x" ]; then
-  logger "$0: locode unset, bailing out"
+ gluondomain="$(/sbin/uci get gluon.core.domain)"
+ if [ "${gluondomain}" != "" ]; then
+  logger "$0: locode unset, migration foobar? Setting to ${gluondomain} ..."
+  /sbin/uci set gluon-node-info.@location[0].locode="${gluondomain}" ||:
+  /sbin/uci commit gluon-node-info
+  locode="${gluondomain}"
+ else
+  logger "$0: locode unset, gluon.core.domain unset: bailing out."
   exit 0
+  fi
 fi
 
 uptime=$(awk </proc/uptime '{printf("%.0f", $1);}')
