@@ -88,9 +88,10 @@ end
 <%
 text = translate("offline-setup-text")
 
-local url="http://setup.4830.org/geoloc.php?rgeo=reg&node=%s&lat=LATITUDE&lon=LONGITUDE"
+local url="https://setup.4830.org/geoloc.php?rgeo=reg&node=%s"
 url=string.format(url, sysconfig.primary_mac)
-text='<p>' .. string.format(text, url) .. '</p>'
+urlhtml='<a href=\"' .. url .. '\">' .. url .. '</a>'
+text='<p>' .. string.format(text, urlhtml) .. '</p>'
 write(text)
 %>
 	<p><%:If neccessary, please update where this node will be located at.%></p>
