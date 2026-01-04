@@ -5,12 +5,17 @@ GLUON="$(echo ${GLUON%~*})"
 EOLFILE="/lib/gluon/eol-devices-${GLUON}"
 
 N1="$(get_image_name)"
-N2="${N1%-*}"
 
-RC1="$(grep "${N1}" "${EOLFILE}" >/dev/null ; echo $?)"
-RC2="$(grep "${N2}" "${EOLFILE}" >/dev/null ; echo $?)"
+RC1="$(awk -v name="${N1}" <"${EOLFILE}" 'BEGIN{found=0;} {if($1==name) found=1;} END{printf("%d", found);}')"
+branch="$(uci get autoupdater.settings.branch)"
 
-if [ $RC1 -eq 0 -o $RC2 -eq 0 ]; then
+# Skip for "fake" branch mns, we deal with them later ...
+if [ "${branch}" = "mns" ]; then
+  exit 0
+fi
+
+# We have a match
+if [ $RC1 -eq 1 ]; then
   branch=$(uci get autoupdater.settings.branch)
   if [ "${branch}" != "deadend" ]; then
     uci set autoupdater.settings.branch='deadend'
