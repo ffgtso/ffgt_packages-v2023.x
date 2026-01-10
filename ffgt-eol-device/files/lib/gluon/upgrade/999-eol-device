@@ -14,14 +14,22 @@ if [ "${branch}" = "mns" ]; then
   exit 0
 fi
 
-# We have a match
 if [ $RC1 -eq 1 ]; then
-  branch=$(uci get autoupdater.settings.branch)
+  # We have a match, device is outdated
   if [ "${branch}" != "deadend" ]; then
     uci set autoupdater.settings.branch='deadend'
     uci commit autoupdater
     HOSTNAME="$(uci get system.@system[0].hostname)"
     uci set system.@system[0].hostname="$(echo ${HOSTNAME})-EOL"
+    uci commit system
+  fi
+else
+  # No match; if in deadend, move back to stable at 1.9 or 2.0
+  if [ "${branch}" = "deadend" ]; then
+    uci set autoupdater.settings.branch='stable'
+    uci commit autoupdater
+    HOSTNAME="$(uci get system.@system[0].hostname | sed -e 's/-EOL$//')"
+    uci set system.@system[0].hostname="${HOSTNAME}"
     uci commit system
   fi
 fi
