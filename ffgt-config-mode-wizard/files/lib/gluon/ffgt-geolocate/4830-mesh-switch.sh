@@ -40,7 +40,7 @@ if [ $(printf "%.0f" "${curlat}") != 0 -o $(printf "%.0f" "${curlon}") != 0 ]; t
  touch /tmp/getmesh.out && rm /tmp/getmesh.out
  # Query for where we should be according to our coordinates and if a
  # starttime is set to actually switch to that mesh
- wget --timeout=2 -q -O /tmp/getmesh.out "http://setup.${IPVXPREFIX}4830.org/geoloc.php?get=mesh&node=${mac}&lat=${curlat}&lon=${curlon}"
+ wget --timeout=2 -q -O /tmp/getmesh.out "http://setup.${IPVXPREFIX}4830.org/geoloc.php?get=newmesh&node=${mac}&lat=${curlat}&lon=${curlon}&loc=${locode}"
  if [ -e /tmp/getmesh.out ]; then
   DSTMESH="$(awk </tmp/getmesh.out '/^DST:/ {printf("%s", $2);}')"
   STRTIME="$(awk </tmp/getmesh.out '/^FRM:/ {printf("%s", $2);}')"
