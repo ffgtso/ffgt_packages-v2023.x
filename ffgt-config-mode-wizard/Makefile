@@ -1,6 +1,8 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=ffgt-config-mode-wizard
+PKG_VERSION:=1
+PKG_RELEASE:=5
 
 include $(TOPDIR)/../package/gluon.mk
 
