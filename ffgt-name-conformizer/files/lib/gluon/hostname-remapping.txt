@@ -79,5 +79,5 @@
 "Stadtb-cherei-Lemgo-AP3";"Stadtbuecherei-Lemgo-AP3"
 "Stadtb-cherei-Lemgo-AP4";"Stadtbuecherei-Lemgo-AP4"
 "SZ-Aspe-Sporthalle-Trib-ne";"SZ-Aspe-Sporthalle-Tribuene"
-"TSV-B-singfeld-Gesch-ftsstelle";"TSV-B-singfeld-Geschaeftsstelle"
+"TSV-B-singfeld-Gesch-ftsstelle";"TSV-Boesingfeld-Geschaeftsstelle"
 "Vers-hnungskirche";"Versoehnungskirche"

@@ -1,13 +1,5 @@
 #!/bin/sh
 
-HOSTNAME="$(pretty-hostname | sed -e 's/"/-/g')"
-HOSTNAME="$(echo -n "$HOSTNAME" | sed -r -e 's/ä/ae/g' -e 's/ö/oe/g' -e 's/ü/ue/g' -e 's/ß/sz/g' -e 's/Ä/Ae/g' -e 's/Ö/Oe/g' -e 's/Ü/Ue/g')"
-HOSTNAME="$(echo -n "$HOSTNAME" | sed -r -e 's/[^a-zA-Z0-9-]/-/g')"
-HOSTNAME="$(echo -n "$HOSTNAME" | sed -r -e 's/-+/-/g' -e 's/^-//')"
-HOSTNAME="${HOSTNAME:0:63}"
-HOSTNAME="$(echo -n "$HOSTNAME" | sed -e 's/-$//')"
-pretty-hostname "$HOSTNAME"
-
 PRIMAC=$(cat /lib/gluon/core/sysconfig/primary_mac)
 
 if [ "$HOSTNAME" = "33330-Stadt-Guetersloh-Berliner-Platz2" ]; then
@@ -46,3 +38,11 @@ if [ -e /lib/gluon/hostname-remapping.txt ]; then
     fi
   done
 fi
+
+HOSTNAME="$(pretty-hostname | sed -e 's/"/-/g')"
+HOSTNAME="$(echo -n "$HOSTNAME" | sed -r -e 's/ä/ae/g' -e 's/ö/oe/g' -e 's/ü/ue/g' -e 's/ß/sz/g' -e 's/Ä/Ae/g' -e 's/Ö/Oe/g' -e 's/Ü/Ue/g')"
+HOSTNAME="$(echo -n "$HOSTNAME" | sed -r -e 's/[^a-zA-Z0-9-]/-/g')"
+HOSTNAME="$(echo -n "$HOSTNAME" | sed -r -e 's/-+/-/g' -e 's/^-//')"
+HOSTNAME="${HOSTNAME:0:63}"
+HOSTNAME="$(echo -n "$HOSTNAME" | sed -e 's/-$//')"
+pretty-hostname "$HOSTNAME"
