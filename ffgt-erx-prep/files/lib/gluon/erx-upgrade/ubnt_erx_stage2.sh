@@ -1,4 +1,7 @@
 #!/bin/sh
+# License: https://github.com/darkxst/erx-migration/blob/main/LICENSE
+# Source: https://github.com/darkxst/erx-migration/tree/main
+# Author: darkxst
 
 . /lib/functions.sh
 
