@@ -19,7 +19,12 @@ RC=$?
 if [ $RC -eq 0 ]; then
   ZIP="$(uci get gluon-node-info.@location[0].zip 2>/dev/null)"
   if [ "x$ZIP" = "x" ]; then
-    ((sleep 300 ; /lib/gluon/ffgt-geolocate/geolocate.sh force ; sleep 30 ; reboot)&)
+    if [ -e /root/gelocate_forced ]; then
+      uci set system.@system[0].hostname="00000-$(echo ${HOSTNAME} | sed -e s/migrated/migr/)"
+      uci commit system
+    else
+      ((sleep 300 ; /lib/gluon/ffgt-geolocate/geolocate.sh force ; touch /root/gelocate_forced ; sleep 30 ; reboot)&)
+    fi
   else
     uci set system.@system[0].hostname="${ZIP}-$(echo ${HOSTNAME} | sed -e s/migrated/migr/)"
     uci commit system
@@ -27,7 +32,7 @@ if [ $RC -eq 0 ]; then
 fi
 
 if [ -e /lib/gluon/hostname-remapping.txt ]; then
-  for i in $(cat /lib/gluon/hostname-remapping.txt)
+  for i in $(cat /lib/gluon/hostname-remapping.txt | sed -e s/\"//g)
   do
     left=$(echo $i|cut -d ';' -f 1)
     right=$(echo $i|cut -d ';' -f 2)

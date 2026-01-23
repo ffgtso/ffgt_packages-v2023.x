@@ -4,9 +4,6 @@ GLUON="$(cat /lib/gluon/release)"
 GLUON="$(echo ${GLUON%~*})"
 EOLFILE="/lib/gluon/eol-devices-${GLUON}"
 
-N1="$(get_image_name)"
-
-RC1="$(awk -v name="${N1}" <"${EOLFILE}" 'BEGIN{found=0;} {if($1==name) found=1;} END{printf("%d", found);}')"
 branch="$(uci get autoupdater.settings.branch)"
 
 # Skip for "fake" branch mns, we deal with them later ...
@@ -14,22 +11,27 @@ if [ "${branch}" = "mns" ]; then
   exit 0
 fi
 
-if [ $RC1 -eq 1 ]; then
-  # We have a match, device is outdated
-  if [ "${branch}" != "deadend" ]; then
-    uci set autoupdater.settings.branch='deadend'
-    uci commit autoupdater
-    HOSTNAME="$(uci get system.@system[0].hostname)"
-    uci set system.@system[0].hostname="$(echo ${HOSTNAME})-EOL"
-    uci commit system
-  fi
-else
-  # No match; if in deadend, move back to stable at 1.9 or 2.0
-  if [ "${branch}" = "deadend" ]; then
-    uci set autoupdater.settings.branch='stable'
-    uci commit autoupdater
-    HOSTNAME="$(uci get system.@system[0].hostname | sed -e 's/-EOL$//')"
-    uci set system.@system[0].hostname="${HOSTNAME}"
-    uci commit system
-  fi
+if [ -e "${EOLFILE}" ]; then
+  N1="$(get_image_name)"
+  RC1="$(awk -v name="${N1}" <"${EOLFILE}" 'BEGIN{found=0;} {if($1==name) found=1;} END{printf("%d", found);}')"
+
+  if [ $RC1 -eq 1 ]; then
+    # We have a match, device is outdated
+    if [ "${branch}" != "deadend" ]; then
+      uci set autoupdater.settings.branch='deadend'
+      uci commit autoupdater
+      HOSTNAME="$(uci get system.@system[0].hostname)"
+      uci set system.@system[0].hostname="$(echo ${HOSTNAME})-EOL"
+      uci commit system
+    fi
+  else
+    # No match; if in deadend, move back to stable at 1.9 or 2.0
+    if [ "${branch}" = "deadend" ]; then
+      uci set autoupdater.settings.branch='stable'
+      uci commit autoupdater
+      HOSTNAME="$(uci get system.@system[0].hostname | sed -e 's/-EOL$//')"
+      uci set system.@system[0].hostname="${HOSTNAME}"
+      uci commit system
+    fi
+ fi
 fi
