@@ -144,7 +144,7 @@ msgstr "Please do not touch this setting unless you know what you are doing! We 
 msgid "Your node's setup is now complete."
 msgstr ""
 
-msgid "No coordinates set and node is offline. We *need* a proper location to assign this node to a Freifunk network ("mesh", "hood", "community", ...)."
+msgid "No coordinates set and node is offline. We *need* a proper location to assign this node to a Freifunk network (\"mesh\", \"hood\", \"community\", ...)."
 msgstr ""
 
 msgid "No location code set!"

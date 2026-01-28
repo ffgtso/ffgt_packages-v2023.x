@@ -164,7 +164,7 @@ msgstr "Da wir die Meshes ortsbezogen automatisch zuweisen, ändere diese Einste
 msgid "Your node's setup is now complete."
 msgstr "Dein Freifunk-Knoten ist nun fertig konfiguriert."
 
-msgid "No coordinates set and node is offline. We *need* a proper location to assign this node to a Freifunk network ("mesh", "hood", "community", ...)."
+msgid "No coordinates set and node is offline. We *need* a proper location to assign this node to a Freifunk network (\"mesh\", \"hood\", \"community\", ...)."
 msgstr "Keine Koordinaten angegeben und der Knoten ist offline. Wir benötigen eine Aufstellposition für jeden Konten, um diesen für das richtige Freifunk-Netzwerk (\"Mesh\", \"Hood\", \"Community\", ...) zu konfigurieren."
 
 msgid "No location code set!"
