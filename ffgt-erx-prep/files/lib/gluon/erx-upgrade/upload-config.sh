@@ -25,5 +25,8 @@ wget -qO- \
   --header="Content-Type: multipart/form-data; boundary=$BOUNDARY" \
   --body-file="$TMPREQ" \
   "$URL"
+RC=$?
 
 rm -f "$TMPREQ"
+
+exit $RC
