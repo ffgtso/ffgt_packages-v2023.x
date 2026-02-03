@@ -23,6 +23,12 @@ if [ ${uptime} -lt 900 ]; then
   exit 0
 fi
 
+# We're now supposed to run ...
+LASTOCTET=$(cut -d : -f6 /lib/gluon/core/sysconfig/primary_mac)
+DELAYSECS=$(printf %d 0x${LASTOCTET})
+# ... but delay hammering the server pseudo-randomly
+sleep ${DELAYSECS}
+
 branch=$(uci get autoupdater.settings.branch)
 AUBRNCH="${branch}"
 
@@ -33,17 +39,15 @@ curlat="$(/sbin/uci get gluon-node-info.@location[0].latitude 2>/dev/null || ech
 curlon="$(/sbin/uci get gluon-node-info.@location[0].longitude 2>/dev/null || echo 0.0)"
 # If at least lat or lon are set and plausible, let's try
 if [ $(printf "%.0f" "${curlat}") != 0 -o $(printf "%.0f" "${curlon}") != 0 ]; then
- IPVXPREFIX="`/lib/gluon/ffgt-geolocate/ipv5.sh`"
- if [ "Y$IPVXPREFIX" == "Y" -o "$IPVXPREFIX" == "ipv5." ]; then
-  logger "$0: IPv5 not implemented (i. e. node seems to be offline)."
-  IPVXPREFIX="ipv5."
- fi
  mac="$(/sbin/uci get network.bat0.macaddr)"
  # Clear previous data
  touch /tmp/getmesh.out && rm /tmp/getmesh.out
  # Query for where we should be according to our coordinates and if a
  # starttime is set to actually switch to that mesh
- wget --timeout=2 -q -O /tmp/getmesh.out "http://setup.${IPVXPREFIX}4830.org/geoloc.php?get=newmesh&node=${mac}&lat=${curlat}&lon=${curlon}&loc=${locode}&aub=${branch}"
+ wget --timeout=2 -q -O /tmp/getmesh.out "http://setup.ipv6.4830.org/geoloc.php?get=newmesh&node=${mac}&lat=${curlat}&lon=${curlon}&loc=${locode}"
+ if [ $? -ne 0 ]; then
+   wget --timeout=2 -q -O /tmp/getmesh.out "http://setup.ipv4.4830.org/geoloc.php?get=newmesh&node=${mac}&lat=${curlat}&lon=${curlon}&loc=${locode}"
+ fi
  if [ -e /tmp/getmesh.out ]; then
   DSTMESH="$(awk </tmp/getmesh.out '/^DST:/ {printf("%s", $2);}')"
   STRTIME="$(awk </tmp/getmesh.out '/^FRM:/ {printf("%s", $2);}')"
@@ -77,7 +81,7 @@ if [ $(printf "%.0f" "${curlat}") != 0 -o $(printf "%.0f" "${curlon}") != 0 ]; t
    fi
   fi
  else
-  logger "$0: call for get=mesh failed on setup.${IPVXPREFIX}4830.org ..."
+  logger "$0: call for get=newmesh failed on setup.4830.org ..."
  fi
 fi
 
@@ -87,8 +91,8 @@ if [ "${AUBRNCH}" != "${branch}" ]; then
   uci commit autoupdater
 fi
 
-# Now, as we've processed the returned data (or not), check if there's a
-# switchtime set and a target locode as well and if it's time to switch
+# Now, check if there's a switchtime set and a target locode as well
+# and if it's time to switch
 now="$(date +%s)"
 switchtime="$(/sbin/uci get gluon-node-info.@location[0].switchtime 2>/dev/null)"
 tgtloc="$(/sbin/uci get gluon-node-info.@location[0].tgtloc 2>/dev/null)"
