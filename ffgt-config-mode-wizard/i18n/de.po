@@ -196,8 +196,8 @@ msgstr "Prüfsummenfehler bei den eingegebenen Daten."
 
 msgid "4830-firewall-notice"
 msgstr "Für die korrekte Funktion sind die UDP-Ports 10000-10099 in der Firewall für den Knoten "
-       "freizuschalten; zusätzlich, sofern kein DNS-Resolver im lokalen Netz angeboten wird, wird der Zugriff auf "
-       "das DNS (Port 53 UDP und TCP) benötigt. %s"
+       "freizuschalten sowie HTTP/HTTPS (80 & 443 TCP); zusätzlich, sofern kein DNS-Resolver im "
+       "lokalen Netz angeboten wird, wird der Zugriff auf das DNS (Port 53 UDP und TCP) benötigt. %s"
 
 msgid "4830-firewall-notice-template"
-msgstr "(Aktuelles, nicht empfohlenes, Minimum für den Tunnel: %s UDP.)"
+msgstr "(Aktuelles, nicht empfohlenes, Minimum für den Tunnel: %s UDP sowie DNS & HTTP.)"
