@@ -37,6 +37,11 @@ switchtime="$(/sbin/uci get gluon-node-info.@location[0].switchtime 2>/dev/null)
 # Ensure these values are numbers
 curlat="$(/sbin/uci get gluon-node-info.@location[0].latitude 2>/dev/null || echo 0.0)"
 curlon="$(/sbin/uci get gluon-node-info.@location[0].longitude 2>/dev/null || echo 0.0)"
+# Sanitize
+#curlat="$(echo "${curlat}" | sed -e 's/ //g')"
+#curlon="$(echo "${curlon}" | sed -e 's/ //g')"
+curlat="$(printf "%.7f" "${curlat}")"
+curlon="$(printf "%.7f" "${curlon}")"
 # If at least lat or lon are set and plausible, let's try
 if [ $(printf "%.0f" "${curlat}") != 0 -o $(printf "%.0f" "${curlon}") != 0 ]; then
  mac="$(/sbin/uci get network.bat0.macaddr)"
