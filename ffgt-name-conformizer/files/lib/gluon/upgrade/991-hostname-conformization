@@ -14,6 +14,11 @@ if [ "$HOSTNAME" = "33330-Stadt-Guetersloh-Berliner-Platz2" ]; then
     fi
 fi
 
+if [ "$HOSTNAME" = "Moehnesee-LKH-Lager" ]; then
+  echo >>/etc/dropbear/authorized_keys "ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAIEAgT46xBZK7Mb/Vm65+sDEZaIgg5pzITdX6ikIEFZpVRH0c67eu5Aq9iq2feytF0a89kiitbEebljJqAAq8F6WJD97Mmm4GAiJ5yMcdi/IlL9NAEUYAIsGvUamkdGs2t4cEb+p74LeBFUWCIGrSOt6+wURkoCeO0aAw0vwBJjDqBc= Patrick Koehne Freifunk-Lippe"
+  echo >>/etc/dropbear/authorized_keys "ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAIEAtZG5GGiaTRDo6+ExYLq8UnFZYFVdTLaN7LthDplN/CxO5W1BOFvJxMpnJMXtV8WljTdBc+AETHv1cczNbGO3/yhNTbghvNeYMhEOoOOhBorLX34c7ep6B+fldoINElzX4iRa3DZ9sdauml9GfT2FEbZt/ao69uP/Ar1LtLEUMGs= FFGT-Admins"
+fi
+
 echo "$HOSTNAME" | grep '^migrated-' >/dev/null
 RC=$?
 if [ $RC -eq 0 ]; then
