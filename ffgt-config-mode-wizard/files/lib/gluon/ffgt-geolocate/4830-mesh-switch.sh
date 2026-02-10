@@ -50,9 +50,9 @@ if [ $(printf "%.0f" "${curlat}") != 0 -o $(printf "%.0f" "${curlon}") != 0 ]; t
  # Query for where we should be according to our coordinates and if a
  # starttime is set to actually switch to that mesh
  querystring="$(echo "geoloc.php?get=newmesh&node=${mac}&lat=${curlat}&lon=${curlon}&loc=${locode}&aub=${branch}" | sed -e 's/ //g')"
- wget --timeout=2 -q -O /tmp/getmesh.out "http://setup.ipv6.4830.org/${querystring}"
+ wget --timeout=2 -6 -q -O /tmp/getmesh.out "http://setup.ipv6.4830.org/${querystring}"
  if [ $? -ne 0 ]; then
-   wget --timeout=2 -q -O /tmp/getmesh.out "http://setup.ipv4.4830.org/${querystring}"
+   wget --timeout=2 -4 -q -O /tmp/getmesh.out "http://setup.ipv4.4830.org/${querystring}"
  fi
  if [ -e /tmp/getmesh.out ]; then
   DSTMESH="$(awk </tmp/getmesh.out '/^DST:/ {printf("%s", $2);}')"
