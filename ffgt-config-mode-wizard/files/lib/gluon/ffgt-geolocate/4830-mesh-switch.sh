@@ -44,7 +44,7 @@ curlat="$(printf "%.7f" "${curlat}")"
 curlon="$(printf "%.7f" "${curlon}")"
 # If at least lat or lon are set and plausible, let's try
 if [ $(printf "%.0f" "${curlat}") != 0 -o $(printf "%.0f" "${curlon}") != 0 ]; then
- mac="$(/sbin/uci get network.bat0.macaddr)"
+ mac="$(cat /lib/gluon/core/sysconfig/primary_mac)"
  # Clear previous data
  touch /tmp/getmesh.out && rm /tmp/getmesh.out
  # Query for where we should be according to our coordinates and if a
