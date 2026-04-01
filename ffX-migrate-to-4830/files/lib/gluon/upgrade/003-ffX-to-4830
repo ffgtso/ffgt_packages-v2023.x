@@ -25,25 +25,31 @@ fi
 mns_phase=1
 delayed_reconf=0
 
+mac="$(echo -e "local util = require 'gluon.util'\nlocal mac=string.sub(util.node_id(), 9);\nprint(mac);" | /usr/bin/lua)"
+if [ "${mac}X" = "X" ]; then
+ mac="0mac"
+fi
+
 hostname="$(pretty-hostname | sed -e 's/"/-/g')"
-hostname="$(echo -n "${hostname}" | sed -r -e 's/\xE4/ae/g' -e 's/\xF6/oe/g' -e 's/\xFC/ue/g' -e 's/\xDF/sz/g' -e 's/\xC4/Ae/g' -e 's/\xD6/Oe/g' -e 's/\xDC/Ue/g')"
-hostname="$(echo -n "${hostname}" | sed -r -e 's/ä/ae/g' -e 's/ö/oe/g' -e 's/ü/ue/g' -e 's/ß/sz/g' -e 's/Ä/Ae/g' -e 's/Ö/Oe/g' -e 's/Ü/Ue/g')"
+hostname="$(echo -n "${hostname}" | awk '{h=$0; gsub(/\xE4/, "ae", h); gsub(/\xF6/, "oe", h); gsub(/\xFC/, "ue", h); gsub(/\xDF/, "sz", h); gsub(/\xC4/, "Ae", h); gsub(/\xD6/, "Oe", h); gsub(/\xDC/, "Ue", h); print h;}')"
+hostname="$(echo -n "${hostname}" | awk '{h=$0; gsub(/\xC3\xA4/, "ae", h); gsub(/\xC3\xB6/, "oe", h); gsub(/\xC3\xBC/, "ue", h); gsub(/\xC3\x9F/, "sz", h); gsub(/\xC3\x84/, "Ae", h); gsub(/\xC3\x96/, "Oe", h); gsub(/\xC3\x9C/, "Ue", h); print h;}')"
 hostname="$(echo -n "${hostname}" | sed -r -e 's/e\. V\./eV/g' -e 's/e\.V\./eV/g')"
 hostname="$(echo -n "${hostname}" | sed -r -e 's/[^a-zA-Z0-9-]/-/g')"
 hostname="$(echo -n "${hostname}" | sed -r -e 's/-+/-/g' -e 's/^-//')"
 hostname="$(echo -n "${hostname}" | sed -r -e 's/Evangelisch-reformierte/Ev-ref/g')"
+hostname="$(echo -n "${hostname}" | sed -r -e 's/Dorfgemeinschaftshaus/DGH/g')"
 hostname="$(echo -n "${hostname}" | sed -r -e 's/^ff-anroechte//g')"
 hostname="$(echo -n "${hostname}" | sed -r -e 's/^fflip-Moehne/Moehne/gi')"
 hostname="$(echo -n "${hostname}" | sed -r -e 's/strasze/str/g' -e 's/strasse/str/g')"
 hostname="$(echo -n "${hostname}" | sed -r -e 's/Strasze/Str/g' -e 's/Strasse/Str/g')"
-hostname="${hostname:0:42}"
 hostname="$(echo -n "${hostname}" | sed -e 's/-$//' -e 's/^-//')"
+len="$(echo -n "{$hostname}"|wc -c)"
+if [ ${len} -gt 42 ]; then
+ hostname="${hostname:0:37}-${mac}"
+fi
+#hostname="${hostname:0:42}"
 if [ "$(pretty-hostname)" != "${hostname}" ]; then
  if [ "X${hostname}" = "X" ]; then
-  mac="$(echo -e "local util = require 'gluon.util'\nlocal mac=string.sub(util.node_id(), 9);\nprint(mac);" | /usr/bin/lua)"
-  if [ "${mac}X" = "X" ]; then
-   mac="no-mac"
-  fi
   hostname="unparsable-hostname-${mac}"
  fi
  logger "Changed hostname from $(pretty-hostname) to ${hostname}."
@@ -82,16 +88,20 @@ if [ "X${domain}" = "X" ]; then
  domain="zzz"
 fi
 
-if [ "$(uci get autoupdater.stable.mirror | grep freifunk-lippe.de >/dev/null ; echo $?)" = "0" -o "$(uci get autoupdater.stable.mirror | grep freifunk-winterberg.net >/dev/null ; echo $?)" = "0" ]; then
- former_fw="???"
- if [ "$(uci get autoupdater.stable.mirror | grep freifunk-lippe.de >/dev/null ; echo $?)" = "0" ]; then
-  echo "Migrating FFLIP-FW to 4830.org FW ..." | tee -a /root/multidomain-migration.log
-  former_fw="LIP"
- else
-  echo "Migrating FFWTB-FW to 4830.org FW ..." | tee -a /root/multidomain-migration.log
-  former_fw="WTB"
- fi
+former_fw="???"
+if [ "$(uci get autoupdater.stable.mirror | grep freifunk-lippe.de >/dev/null ; echo $?)" = "0" ]; then
+ former_fw="LIP"
+fi
 
+if [ "$(uci get autoupdater.stable.mirror | grep freifunk-winterberg.net >/dev/null ; echo $?)" = "0" ]; then
+ former_fw="WTB"
+fi
+
+if [ "$(uci get autoupdater.stable.mirror | grep freifunk-nordheide >/dev/null ; echo $?)" = "0" ]; then
+ former_fw="NH"
+fi
+
+if [ "${former_fw}" = "LIP" -o "${former_fw}" = "WTB" -o "${former_fw}" = "NH" ]; then
  # FIXUPs
  for file in 550-rsk-config 888-button-bind
  do
@@ -113,6 +123,19 @@ if [ "$(uci get autoupdater.stable.mirror | grep freifunk-lippe.de >/dev/null ; 
    domain="lem"
   fi
   targetlocode="$(/lib/gluon/ffgt-geolocate/is_mns.sh)"
+ fi
+
+ if [ "${former_fw}" = "NH" ]; then
+  olddom=$(uci get gluon.core.domain)
+  domain=$(echo ${olddom} | sed -e s/ffstd/sta/ -e s/ffnhsw/bhu/ -e s/ffnhso/jeg/ -e s/ffnhno/zes/ -e s/ffnhnw/win/ -e s/ffnh/xx4/ -e s/ffnhdiv/xx5/)
+  targetlocode="$(/lib/gluon/ffgt-geolocate/is_mns.sh)"
+  if [ "${targetlocode}" != "zzz" ]; then
+   domain="${targetlocode}"
+  fi
+  if [ ! -e /lib/gluon/domains/${domain}.json ]; then
+   domain="zzz"
+  fi
+  targetlocode="ndh"
  fi
 
  if [ "${former_fw}" = "WTB" ]; then
