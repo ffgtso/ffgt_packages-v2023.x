@@ -1,0 +1,43 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: gluon-pump\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "PUMP"
+msgstr ""
+
+msgid "PUMP (Premium Ultra Mesh Plus) creates an encrypted infrastructure WLAN and uses it as a batman-adv transport. Use AP mode on the central side of a planned link and STA mode on the remote side. The SSID and passphrase are derived from the site configuration and cannot be changed here."
+msgstr ""
+
+msgid "Name (SSID)"
+msgstr ""
+
+msgid "Passphrase"
+msgstr ""
+
+msgid "The generated PUMP SSID is longer than 32 characters. Shorten the domain_names value in the site configuration."
+msgstr ""
+
+msgid "The generated PUMP passphrase is not a valid WPA key. prefix6 must be 8-63 printable ASCII characters."
+msgstr ""
+
+msgid "Enabled"
+msgstr ""
+
+msgid "Mode"
+msgstr ""
+
+msgid "Access point (AP)"
+msgstr ""
+
+msgid "Station (STA)"
+msgstr ""
+
+msgid "Radio"
+msgstr ""
+
+msgid "All radios"
+msgstr ""
+
+msgid "unknown band"
+msgstr ""

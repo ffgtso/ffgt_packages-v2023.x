@@ -1,0 +1,97 @@
+#!/usr/bin/lua
+
+local uci = require('simple-uci').cursor()
+local wireless = require 'gluon.wireless'
+local pump = require 'gluon.pump'
+
+local function ensure_settings()
+	if not uci:get('pump', 'settings') then
+		uci:section('pump', 'settings', 'settings', {
+			enabled = false,
+			mode = 'ap',
+			radio = 'all',
+			mesh_no_rebroadcast = false,
+		})
+	end
+end
+
+local function selected_mode()
+	local mode = uci:get('pump', 'settings', 'mode')
+	if mode == 'sta' then
+		return 'sta'
+	end
+
+	return 'ap'
+end
+
+local function selected_radio_matches(radio_name)
+	local selected = uci:get('pump', 'settings', 'radio') or 'all'
+	return selected == 'all' or selected == radio_name
+end
+
+local function configure_network(name, enabled)
+	uci:section('network', 'interface', name, {
+		proto = 'gluon_mesh',
+		transitive = '1',
+		fixed_mtu = '1',
+	})
+
+	if uci:get_bool('pump', 'settings', 'mesh_no_rebroadcast') then
+		uci:set('network', name, 'mesh_no_rebroadcast', '1')
+	else
+		uci:delete('network', name, 'mesh_no_rebroadcast')
+	end
+
+	if enabled then
+		uci:delete('network', name, 'auto')
+	else
+		uci:set('network', name, 'auto', '0')
+	end
+end
+
+local function configure_wireless(radio, index, enabled)
+	local radio_name = radio['.name']
+	local name = pump.iface_name(radio_name)
+	local mode = selected_mode()
+
+	configure_network(name, enabled)
+
+	if not enabled then
+		if uci:get('wireless', name) then
+			uci:set('wireless', name, 'disabled', true)
+		end
+		return
+	end
+
+	local macaddr = wireless.get_wlan_mac(uci, radio, index, 3)
+	if not macaddr then
+		uci:set('wireless', name, 'disabled', true)
+		return
+	end
+
+	uci:section('wireless', 'wifi-iface', name, {
+		device = radio_name,
+		network = name,
+		mode = mode,
+		encryption = 'psk3-mixed',
+		ieee80211w = '1',
+		ssid = pump.ssid(),
+		key = pump.key(),
+		macaddr = macaddr,
+		ifname = pump.ifname(radio_name),
+		disabled = false,
+	})
+end
+
+ensure_settings()
+
+local globally_enabled = uci:get_bool('pump', 'settings', 'enabled') and pump.config_is_valid()
+
+wireless.foreach_radio(uci, function(radio, index)
+	local radio_name = radio['.name']
+	configure_wireless(radio, index, globally_enabled and selected_radio_matches(radio_name))
+end)
+
+uci:save('pump')
+uci:save('network')
+uci:save('wireless')

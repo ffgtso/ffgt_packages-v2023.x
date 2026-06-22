@@ -1,14 +1,22 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=gluon-pump
-PKG_VERSION:=1
-PKG_RELEASE:=2
+PKG_VERSION:=0.1.0
+PKG_RELEASE:=1
+
+PKG_MAINTAINER:=4830.org e. V. <wusel+src@4830.org>
+PKG_LICENSE:=MIT
 
 include $(TOPDIR)/../package/gluon.mk
 
 define Package/gluon-pump
-  TITLE:=Enable PUMP as Mesh-option for DFS channels
-  DEPENDS:=+gluon-web-admin +libiwinfo-lua
+  TITLE:=PUMP wireless batman-adv transport
+  DEPENDS:=+gluon-core +gluon-web-admin +gluon-mesh-batman-adv +gluon-wireless-encryption-wpa3
+endef
+
+define Package/gluon-pump/description
+  Premium Ultra Mesh Plus: encrypted AP/STA infrastructure WLAN used as a
+  batman-adv transport interface via Gluon's gluon_mesh protocol.
 endef
 
 $(eval $(call BuildPackageGluon,gluon-pump))
