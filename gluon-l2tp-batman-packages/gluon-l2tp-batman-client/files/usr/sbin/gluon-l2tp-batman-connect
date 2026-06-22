@@ -1,0 +1,107 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+FETCH=${FETCH:-/bin/uclient-fetch}
+SETUP=${SETUP:-/lib/gluon/gluon-l2tp-batman/client-tunnel}
+BATIF=${BATIF:-bat0}
+MTU=${MTU:-1500}
+TMP=/tmp/gluon-l2tp-batman-response.$$
+
+usage() {
+	cat >&2 <<USAGE
+usage: $0 [URL]
+
+URL defaults to http://nextnode:49152/cgi-bin/connect .
+For IPv6 literals, use brackets, for example:
+  $0 http://[fdca:ffee:babe:1::1]:49152/cgi-bin/connect
+USAGE
+	exit 2
+}
+
+die() {
+	echo "error: $*" >&2
+	rm -f "$TMP"
+	exit 1
+}
+
+valid_ip() {
+	case "$1" in ''|*[!0-9A-Fa-f:.]*) return 1 ;; esac
+}
+
+valid_num() {
+	case "$1" in ''|*[!0-9]*) return 1 ;; esac
+}
+
+valid_ifname() {
+	case "$1" in ''|*[!A-Za-z0-9_.-]*|????????????????*) return 1 ;; esac
+}
+
+set_kv() {
+	case "$1" in
+		status) status=$2 ;;
+		encap) encap=$2 ;;
+		batif) batif=$2 ;;
+		mtu) mtu=$2 ;;
+		server_addr) server_addr=$2 ;;
+		client_addr) client_addr=$2 ;;
+		server_ifname) server_ifname=$2 ;;
+		client_ifname) client_ifname=$2 ;;
+		server_tunnel_id) server_tunnel_id=$2 ;;
+		client_tunnel_id) client_tunnel_id=$2 ;;
+		server_session_id) server_session_id=$2 ;;
+		client_session_id) client_session_id=$2 ;;
+		server_udp_port) server_udp_port=$2 ;;
+		client_udp_port) client_udp_port=$2 ;;
+		message) message=$2 ;;
+	esac
+}
+
+[ "$#" -le 1 ] || usage
+URL=${1:-http://nextnode:49152/cgi-bin/connect}
+
+if ! "$FETCH" -q -O "$TMP" "$URL"; then
+	die "fetch failed: $URL"
+fi
+
+status=
+message=
+encap=
+batif=$BATIF
+mtu=$MTU
+server_addr=
+client_addr=
+server_ifname=
+client_ifname=
+server_tunnel_id=
+client_tunnel_id=
+server_session_id=
+client_session_id=
+server_udp_port=
+client_udp_port=
+
+while IFS='=' read -r key value; do
+	[ -n "$key" ] || continue
+	case "$key" in *[!A-Za-z0-9_]*) continue ;; esac
+	set_kv "$key" "$value"
+done < "$TMP"
+
+[ "$status" = ok ] || die "server returned error: ${message:-unknown}"
+[ "$encap" = udp ] || die "unsupported encap: ${encap:-unset}"
+valid_ip "$server_addr" || die "invalid server_addr"
+valid_ip "$client_addr" || die "invalid client_addr"
+valid_ifname "$client_ifname" || die "invalid client_ifname"
+valid_ifname "$batif" || die "invalid batif"
+valid_num "$mtu" || die "invalid mtu"
+for n in "$server_tunnel_id" "$client_tunnel_id" "$server_session_id" "$client_session_id" "$server_udp_port" "$client_udp_port"; do
+	valid_num "$n" || die "invalid numeric response: $n"
+done
+
+BATIF="$batif" MTU="$mtu" "$SETUP" \
+	"$client_addr" "$server_addr" "$client_ifname" \
+	"$client_tunnel_id" "$server_tunnel_id" \
+	"$client_session_id" "$server_session_id" \
+	"$client_udp_port" "$server_udp_port"
+
+rm -f "$TMP"
+echo "ok: $client_ifname added to $batif, L2TPv3 ${client_addr} -> ${server_addr}"

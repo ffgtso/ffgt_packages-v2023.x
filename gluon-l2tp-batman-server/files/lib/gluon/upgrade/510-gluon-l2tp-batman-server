@@ -1,0 +1,30 @@
+#!/bin/sh
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+PORT=49152
+HOME=/lib/gluon/gluon-l2tp-batman
+SECTION=gluon_l2tp_batman
+
+site_value() {
+	lua -e "local site=require('gluon.site'); local v=site$1(); if v ~= nil then print(v) end" 2>/dev/null
+}
+
+IP4=$(site_value '.next_node.ip4')
+IP6=$(site_value '.next_node.ip6')
+
+uci -q delete uhttpd.$SECTION
+uci set uhttpd.$SECTION='uhttpd'
+uci set uhttpd.$SECTION.home="$HOME"
+uci set uhttpd.$SECTION.cgi_prefix='/cgi-bin'
+uci set uhttpd.$SECTION.script_timeout='30'
+uci set uhttpd.$SECTION.network_timeout='30'
+uci set uhttpd.$SECTION.http_keepalive='0'
+uci set uhttpd.$SECTION.max_requests='3'
+uci set uhttpd.$SECTION.max_connections='20'
+uci set uhttpd.$SECTION.no_dirlists='1'
+uci set uhttpd.$SECTION.rfc1918_filter='0'
+
+[ -n "$IP4" ] && uci add_list uhttpd.$SECTION.listen_http="${IP4}:${PORT}"
+[ -n "$IP6" ] && uci add_list uhttpd.$SECTION.listen_http="[${IP6}]:${PORT}"
+
+uci commit uhttpd

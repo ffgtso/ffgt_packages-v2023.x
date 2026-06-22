@@ -1,0 +1,107 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+IP=${IP:-/usr/sbin/ip}
+SETUP=${SETUP:-/lib/gluon/gluon-l2tp-batman/server-tunnel}
+BATIF=${BATIF:-bat0}
+MTU=${MTU:-1500}
+
+header() {
+	printf 'Status: %s\r\n' "$1"
+	printf 'Content-Type: text/plain\r\n'
+	printf 'Cache-Control: no-store\r\n'
+	printf '\r\n'
+}
+
+fail() {
+	header "${2:-500}"
+	printf 'status=error\n'
+	printf 'message=%s\n' "$1"
+	exit 0
+}
+
+valid_ip() {
+	case "$1" in ''|*[!0-9A-Fa-f:.]*) return 1 ;; esac
+}
+
+is_v6() {
+	case "$1" in *:*) return 0 ;; *) return 1 ;; esac
+}
+
+ck() {
+	printf '%s' "$1" | cksum | awk '{ print $1 }'
+}
+
+id32() {
+	ck "$1" | awk '{ n = $1 % 2147483000; if (n < 1) n = 1; print n + 1 }'
+}
+
+portnum() {
+	ck "$1" | awk '{ print 49153 + ($1 % 16383) }'
+}
+
+ifhash() {
+	ck "$1" | awk '{ printf "%08d", ($1 % 100000000) }'
+}
+
+local_from_route() {
+	$IP route get "$1" 2>/dev/null | sed -n 's/.* src \([^ ]*\).*/\1/p' | head -n 1
+}
+
+REMOTE=${REMOTE_ADDR:-}
+LOCAL=${SERVER_ADDR:-}
+REMOTE=${REMOTE#[}
+REMOTE=${REMOTE%]}
+LOCAL=${LOCAL#[}
+LOCAL=${LOCAL%]}
+
+valid_ip "$REMOTE" || fail "invalid REMOTE_ADDR" 400
+if ! valid_ip "$LOCAL"; then
+	LOCAL=$(local_from_route "$REMOTE" || true)
+fi
+valid_ip "$LOCAL" || fail "cannot determine local L2TP address" 500
+
+if is_v6 "$REMOTE"; then
+	is_v6 "$LOCAL" || fail "address family mismatch" 500
+else
+	if is_v6 "$LOCAL"; then
+		fail "address family mismatch" 500
+	fi
+fi
+
+PAIR="${LOCAL}-${REMOTE}"
+SERVER_TID=$(id32 "server-tunnel:${PAIR}")
+CLIENT_TID=$(id32 "client-tunnel:${PAIR}")
+SERVER_SID=$(id32 "server-session:${PAIR}")
+CLIENT_SID=$(id32 "client-session:${PAIR}")
+SERVER_PORT=$(portnum "server-port:${PAIR}")
+CLIENT_PORT=$(portnum "client-port:${PAIR}")
+H=$(ifhash "$PAIR")
+SERVER_IF="l2s${H}"
+CLIENT_IF="l2c${H}"
+
+if ! BATIF="$BATIF" MTU="$MTU" "$SETUP" \
+	"$LOCAL" "$REMOTE" "$SERVER_IF" \
+	"$SERVER_TID" "$CLIENT_TID" \
+	"$SERVER_SID" "$CLIENT_SID" \
+	"$SERVER_PORT" "$CLIENT_PORT" >/tmp/gluon-l2tp-batman-cgi.out 2>/tmp/gluon-l2tp-batman-cgi.err; then
+	MSG=$(cat /tmp/gluon-l2tp-batman-cgi.err 2>/dev/null | tr '\n' ' ' | sed 's/[^A-Za-z0-9:_. -]/_/g')
+	fail "setup failed: ${MSG:-unknown}" 500
+fi
+
+header 200
+printf 'status=ok\n'
+printf 'encap=udp\n'
+printf 'batif=%s\n' "$BATIF"
+printf 'mtu=%s\n' "$MTU"
+printf 'server_addr=%s\n' "$LOCAL"
+printf 'client_addr=%s\n' "$REMOTE"
+printf 'server_ifname=%s\n' "$SERVER_IF"
+printf 'client_ifname=%s\n' "$CLIENT_IF"
+printf 'server_tunnel_id=%s\n' "$SERVER_TID"
+printf 'client_tunnel_id=%s\n' "$CLIENT_TID"
+printf 'server_session_id=%s\n' "$SERVER_SID"
+printf 'client_session_id=%s\n' "$CLIENT_SID"
+printf 'server_udp_port=%s\n' "$SERVER_PORT"
+printf 'client_udp_port=%s\n' "$CLIENT_PORT"

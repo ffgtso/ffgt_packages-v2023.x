@@ -1,0 +1,89 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+IP=${IP:-/usr/sbin/ip}
+BATCTL=${BATCTL:-/usr/sbin/batctl}
+BATIF=${BATIF:-bat0}
+MTU=${MTU:-1500}
+ERR=/tmp/gluon-l2tp-batman.err
+
+die() {
+	echo "error: $*" >&2
+	exit 1
+}
+
+valid_ip() {
+	case "$1" in ''|*[!0-9A-Fa-f:.]*) return 1 ;; esac
+}
+
+valid_num() {
+	case "$1" in ''|*[!0-9]*) return 1 ;; esac
+}
+
+valid_ifname() {
+	case "$1" in ''|*[!A-Za-z0-9_.-]*|????????????????*) return 1 ;; esac
+}
+
+add_to_batman() {
+	local ifname="$1"
+	$IP link show "$BATIF" >/dev/null 2>&1 || die "BATMAN interface $BATIF not found"
+
+	if command -v batctl >/dev/null 2>&1; then
+		if ! $BATCTL meshif "$BATIF" if add "$ifname" 2>"$ERR"; then
+			if grep -qiE 'already|exists|exist|active|File exists' "$ERR" 2>/dev/null; then
+				:
+			else
+				cat "$ERR" >&2 2>/dev/null || true
+				rm -f "$ERR"
+				die "failed to add $ifname to $BATIF"
+			fi
+		fi
+	else
+		$IP link set dev "$ifname" master "$BATIF" 2>"$ERR" || {
+			cat "$ERR" >&2 2>/dev/null || true
+			rm -f "$ERR"
+			die "batctl missing and ip master fallback failed"
+		}
+	fi
+	rm -f "$ERR"
+}
+
+[ "$#" -eq 9 ] || die "usage: $0 LOCAL REMOTE IFNAME TID PEER_TID SID PEER_SID UDP_SPORT UDP_DPORT"
+LOCAL=$1
+REMOTE=$2
+IFNAME=$3
+TID=$4
+PEER_TID=$5
+SID=$6
+PEER_SID=$7
+UDP_SPORT=$8
+UDP_DPORT=$9
+
+valid_ip "$LOCAL" || die "invalid local address: $LOCAL"
+valid_ip "$REMOTE" || die "invalid remote address: $REMOTE"
+valid_ifname "$IFNAME" || die "invalid interface name: $IFNAME"
+for n in "$TID" "$PEER_TID" "$SID" "$PEER_SID" "$UDP_SPORT" "$UDP_DPORT"; do
+	valid_num "$n" || die "invalid numeric parameter: $n"
+done
+
+modprobe l2tp_eth 2>/dev/null || true
+
+if ! $IP l2tp show tunnel tunnel_id "$TID" >/dev/null 2>&1; then
+	$IP l2tp add tunnel \
+		encap udp \
+		local "$LOCAL" remote "$REMOTE" \
+		tunnel_id "$TID" peer_tunnel_id "$PEER_TID" \
+		udp_sport "$UDP_SPORT" udp_dport "$UDP_DPORT"
+fi
+
+if ! $IP l2tp show session tunnel_id "$TID" session_id "$SID" >/dev/null 2>&1; then
+	$IP l2tp add session \
+		name "$IFNAME" \
+		tunnel_id "$TID" \
+		session_id "$SID" peer_session_id "$PEER_SID"
+fi
+
+$IP link set dev "$IFNAME" mtu "$MTU"
+$IP link set dev "$IFNAME" up
+add_to_batman "$IFNAME"
