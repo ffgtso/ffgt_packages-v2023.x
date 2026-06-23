@@ -42,16 +42,22 @@ Das Paket verwendet konsequent den Bezeichner `pump`:
 Die SSID und die Passphrase werden nicht lokal editiert, sondern aus der
 Site-/Domain-Konfiguration abgeleitet:
 
-* SSID: `PUMP-` + erster Wert aus `domain_names`
-* Passphrase: Wert von `prefix6`
+* SSID: `PUMP-` + Wert aus `gluon.core.domain`; falls nicht gesetzt: `PUMP-nix`
+* Passphrase: Wert von `prefix6` aus der Site-Konfiguration
 * Encryption: `psk3-mixed` mit `ieee80211w=1`, also WPA2/WPA3-Mixed-Mode
 
 Im Config-Mode werden SSID und Passphrase als nicht editierbare Werte
-angezeigt. Editierbar sind nur:
+angezeigt. Editierbar sind:
 
 * `enabled`: PUMP aktivieren/deaktivieren
 * `mode`: `ap` oder `sta`
 * `radio`: `all`, `radio0`, `radio1`, ...
+* Funkkanal je Radio: wird in `wireless.<radio>.channel` gespeichert
+
+Sobald über PUMP ein Kanal gespeichert wird, setzt das Paket
+`gluon.wireless.preserve_channels=1`. Das ist notwendig, weil Gluons
+`200-wireless` die WLAN-Kanäle bei Upgrades sonst wieder aus `site.conf`
+wiederherstellt.
 
 ## UCI
 
@@ -71,10 +77,13 @@ Beispiel AP-Seite:
 uci set pump.settings.enabled='1'
 uci set pump.settings.mode='ap'
 uci set pump.settings.radio='radio1'
+uci set wireless.radio1.channel='44'
+uci set gluon.wireless.preserve_channels='1'
 uci commit pump
+uci commit gluon
+uci commit wireless
 /lib/gluon/upgrade/335-gluon-pump
 uci commit network
-uci commit wireless
 wifi reload
 ```
 
@@ -84,10 +93,13 @@ Beispiel STA-Seite:
 uci set pump.settings.enabled='1'
 uci set pump.settings.mode='sta'
 uci set pump.settings.radio='radio1'
+uci set wireless.radio1.channel='44'
+uci set gluon.wireless.preserve_channels='1'
 uci commit pump
+uci commit gluon
+uci commit wireless
 /lib/gluon/upgrade/335-gluon-pump
 uci commit network
-uci commit wireless
 wifi reload
 ```
 
@@ -104,6 +116,8 @@ config wifi-iface 'pump_radio1'
 	option network 'pump_radio1'
 	option mode 'ap'      # oder 'sta'
 	option ifname 'pump1'
+	# Der Kanal steht nicht am wifi-iface, sondern am wifi-device:
+	# wireless.radio1.channel='44'
 	option ssid 'PUMP-...'
 	option key '...prefix6...'
 	option encryption 'psk3-mixed'
@@ -143,7 +157,8 @@ GLUON_SITE_PACKAGES += gluon-pump
 * Erfordert Gluon ab `v2023.1.x`.
 * Erfordert batman-adv, also typischerweise `mesh-batman-adv-15`.
 * Erfordert WPA3-Support über `gluon-wireless-encryption-wpa3`.
-* `domain_names` darf inklusive Präfix `PUMP-` maximal 32 Zeichen ergeben.
+* Erfordert `libiwinfo-lua` für die Gluon-konforme Kanalliste im Config-Mode.
+* `gluon.core.domain` darf inklusive Präfix `PUMP-` maximal 32 Zeichen ergeben.
   Ist die SSID länger, wird PUMP nicht aktiviert und im Config-Mode wird eine
   Warnung angezeigt.
 * `prefix6` muss ein gültiger WPA-Key sein: 8 bis 63 druckbare ASCII-Zeichen.

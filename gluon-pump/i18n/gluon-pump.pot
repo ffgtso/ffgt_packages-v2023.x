@@ -6,7 +6,7 @@ msgstr ""
 msgid "PUMP"
 msgstr ""
 
-msgid "PUMP (Premium Ultra Mesh Plus) creates an encrypted infrastructure WLAN and uses it as a batman-adv transport. Use AP mode on the central side of a planned link and STA mode on the remote side. The SSID and passphrase are derived from the site configuration and cannot be changed here."
+msgid "PUMP (Premium Ultra Mesh Plus) creates an encrypted infrastructure WLAN and uses it as a batman-adv transport. Use AP mode on the central side of a planned link and STA mode on the remote side. The SSID and passphrase are derived from the site/domain configuration and cannot be changed here."
 msgstr ""
 
 msgid "Name (SSID)"
@@ -15,7 +15,7 @@ msgstr ""
 msgid "Passphrase"
 msgstr ""
 
-msgid "The generated PUMP SSID is longer than 32 characters. Shorten the domain_names value in the site configuration."
+msgid "The generated PUMP SSID is longer than 32 characters. Shorten the domain code in gluon.core.domain."
 msgstr ""
 
 msgid "The generated PUMP passphrase is not a valid WPA key. prefix6 must be 8-63 printable ASCII characters."
@@ -40,4 +40,13 @@ msgid "All radios"
 msgstr ""
 
 msgid "unknown band"
+msgstr ""
+
+msgid "Configuration warning"
+msgstr ""
+
+msgid "Channel"
+msgstr ""
+
+msgid "(automatic)"
 msgstr ""

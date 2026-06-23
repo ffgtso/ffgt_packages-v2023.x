@@ -1,33 +1,27 @@
 local site = require 'gluon.site'
+local uci = require('simple-uci').cursor()
 
 local M = {}
 
-local function first_domain_name(domain_names)
-	if type(domain_names) ~= 'table' then
+local function non_empty(value)
+	if value == nil then
 		return nil
 	end
 
-	local keys = {}
-	for key in pairs(domain_names) do
-		table.insert(keys, key)
-	end
-	table.sort(keys)
-
-	if #keys == 0 then
+	value = tostring(value)
+	if value == '' then
 		return nil
 	end
 
-	return domain_names[keys[1]]
+	return value
 end
 
-function M.domain_name()
-	return first_domain_name(site.domain_names({}))
-		or site.site_name(site.site_code('gluon'))
-		or 'gluon'
+function M.domain_code()
+	return non_empty(uci:get('gluon', 'core', 'domain')) or 'nix'
 end
 
 function M.ssid()
-	return 'PUMP-' .. tostring(M.domain_name())
+	return 'PUMP-' .. M.domain_code()
 end
 
 function M.key()
