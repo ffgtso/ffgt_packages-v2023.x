@@ -6,3 +6,5 @@ config settings 'settings'
 	# Internal ownership flag: set to 1 only when PUMP enabled
 	# gluon.wireless.preserve_channels itself.
 	option preserve_channels '0'
+	# Internal keys named iface_*_disabled are created while STA mode disables
+	# other wifi-ifaces on the selected radio and are removed again on restore.

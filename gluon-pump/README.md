@@ -105,6 +105,14 @@ HE160, HE80, HE40, HE20, VHT160, VHT80, VHT40, VHT20, HT40, HT20
 
 Die konkrete Kanalbreite der Verbindung wird dann mit dem AP ausgehandelt.
 
+Wichtig: Bei OpenWrt/mac80211 kann ein Radio im STA-Modus nur dann frei scannen
+und dem AP-Kanal folgen, wenn keine anderen AP- oder Mesh-VIFs auf demselben
+PHY den Kanal festnageln. Deshalb deaktiviert PUMP im STA-Modus alle anderen
+`wifi-iface`-Sections auf dem ausgewählten Radio temporär und merkt sich deren
+vorherigen `disabled`-Status in internen `pump.settings.iface_*_disabled`-
+Optionen. Beim Wechsel zurück in den AP-Modus, bei Auswahl eines anderen Radios
+oder beim Deaktivieren von PUMP werden diese Zustände wiederhergestellt.
+
 ## Rückkehr zur site.conf
 
 Wenn PUMP deaktiviert wird und PUMP selbst zuvor
@@ -177,6 +185,10 @@ config wifi-device 'radio1'
 	option htmode '<bester unterstützter Modus>'
 ```
 
+Außerdem werden auf `radio1` andere VIFs wie `client_radio1`, `owe_radio1`,
+`mesh_radio1` oder lokal ergänzte AP-VIFs deaktiviert, solange PUMP auf diesem
+Radio im STA-Modus läuft.
+
 Das Upgrade-Script erzeugt pro ausgewähltem Radio außerdem:
 
 ```uci
@@ -228,7 +240,8 @@ GLUON_SITE_PACKAGES += gluon-pump
 
 * Erfordert Gluon ab `v2023.1.x`.
 * Erfordert batman-adv, also typischerweise `mesh-batman-adv-15`.
-* Erfordert WPA3-Support über `gluon-wireless-encryption-wpa3`.
+* Erfordert WPA3-AP-Support über `gluon-wireless-encryption-wpa3`.
+* Erfordert für den STA-Modus zusätzlich `wpa-supplicant-wolfssl`, da `hostapd-wolfssl` nur den Authenticator/AP-Teil bereitstellt.
 * Erfordert `libiwinfo-lua` für Kanal- und HT-Modus-Listen im Config-Mode.
 * `gluon.core.domain` darf inklusive Präfix `PUMP-` maximal 32 Zeichen ergeben.
   Ist die SSID länger, wird PUMP nicht aktiviert und im Config-Mode wird eine

@@ -82,6 +82,66 @@ local function restore_site_wireless_if_owned()
 	os.execute('/lib/gluon/upgrade/200-wireless')
 end
 
+
+local function saved_disabled_option(iface_name)
+	return 'iface_' .. iface_name:gsub('[^%w_]', '_') .. '_disabled'
+end
+
+local function remember_and_disable_iface(iface_name)
+	local option = saved_disabled_option(iface_name)
+	if uci:get('pump', 'settings', option) == nil then
+		local disabled = uci:get('wireless', iface_name, 'disabled')
+		uci:set('pump', 'settings', option, disabled == nil and 'absent' or tostring(disabled))
+	end
+	uci:set('wireless', iface_name, 'disabled', '1')
+end
+
+local function restore_iface_disabled_state(iface_name)
+	local option = saved_disabled_option(iface_name)
+	local saved = uci:get('pump', 'settings', option)
+	if saved == nil then
+		return
+	end
+
+	if saved == '1' or saved == 'true' then
+		uci:set('wireless', iface_name, 'disabled', '1')
+	else
+		-- Treat both an originally absent option and an explicit false value as
+		-- enabled. Removing the option keeps the resulting wireless config close
+		-- to Gluon's generated defaults.
+		uci:delete('wireless', iface_name, 'disabled')
+	end
+
+	uci:delete('pump', 'settings', option)
+end
+
+local function set_non_pump_ifaces_disabled(radio_name, disabled)
+	uci:foreach('wireless', 'wifi-iface', function(iface)
+		local iface_name = iface['.name']
+		if iface.device ~= radio_name then
+			return
+		end
+		if iface_name == pump.iface_name(radio_name) then
+			return
+		end
+
+		if disabled then
+			remember_and_disable_iface(iface_name)
+		else
+			restore_iface_disabled_state(iface_name)
+		end
+	end)
+end
+
+local function restore_all_saved_ifaces()
+	uci:foreach('wireless', 'wifi-iface', function(iface)
+		local iface_name = iface['.name']
+		if iface_name then
+			restore_iface_disabled_state(iface_name)
+		end
+	end)
+end
+
 local function apply_radio_settings(radio)
 	local radio_name = radio['.name']
 	local mode = selected_mode()
@@ -132,11 +192,17 @@ local function configure_wireless(radio, index, enabled)
 	configure_network(name, enabled)
 
 	if not enabled then
+		set_non_pump_ifaces_disabled(radio_name, false)
 		if uci:get('wireless', name) then
 			uci:set('wireless', name, 'disabled', true)
 		end
 		return
 	end
+
+	-- In STA mode, the selected PUMP radio must be able to follow whichever
+	-- PUMP AP it finds. Other AP/mesh VIFs on the same phy would pin the radio
+	-- to their own channel, so we disable them while remembering their state.
+	set_non_pump_ifaces_disabled(radio_name, mode == 'sta')
 
 	apply_radio_settings(radio)
 
@@ -165,6 +231,7 @@ ensure_settings()
 local globally_enabled = uci:get_bool('pump', 'settings', 'enabled') and pump.config_is_valid()
 
 if not globally_enabled then
+	restore_all_saved_ifaces()
 	restore_site_wireless_if_owned()
 end
 
