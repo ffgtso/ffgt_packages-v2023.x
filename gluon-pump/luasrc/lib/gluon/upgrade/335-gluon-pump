@@ -1,5 +1,6 @@
 #!/usr/bin/lua
 
+local iwinfo = require 'iwinfo'
 local uci = require('simple-uci').cursor()
 local wireless = require 'gluon.wireless'
 local pump = require 'gluon.pump'
@@ -11,7 +12,14 @@ local function ensure_settings()
 			mode = 'ap',
 			radio = 'all',
 			mesh_no_rebroadcast = false,
+			preserve_channels = false,
 		})
+	end
+end
+
+local function ensure_gluon_wireless()
+	if not uci:get('gluon', 'wireless') then
+		uci:section('gluon', 'wireless', 'wireless', {})
 	end
 end
 
@@ -25,8 +33,75 @@ local function selected_mode()
 end
 
 local function selected_radio_matches(radio_name)
-	local selected = uci:get('pump', 'settings', 'radio') or 'all'
-	return selected == 'all' or selected == radio_name
+	return pump.radio_selected(uci:get('pump', 'settings', 'radio') or 'all', radio_name)
+end
+
+local function best_htmode(radio_config)
+	local phy = wireless.find_phy(radio_config)
+	if not phy then
+		return nil
+	end
+
+	local htmodelist = iwinfo.nl80211.htmodelist(phy) or {}
+	local preferred_order = {
+		'HE160', 'HE80', 'HE40', 'HE20',
+		'VHT160', 'VHT80', 'VHT40', 'VHT20',
+		'HT40', 'HT20',
+	}
+
+	for _, htmode in ipairs(preferred_order) do
+		if htmodelist[htmode] then
+			return htmode
+		end
+	end
+
+	return nil
+end
+
+local own_preserve_channels = uci:get_bool('pump', 'settings', 'preserve_channels')
+
+local function ensure_preserve_channels()
+	ensure_gluon_wireless()
+	if not uci:get_bool('gluon', 'wireless', 'preserve_channels') then
+		own_preserve_channels = true
+	end
+	uci:set('gluon', 'wireless', 'preserve_channels', '1')
+	uci:set('pump', 'settings', 'preserve_channels', own_preserve_channels and '1' or '0')
+end
+
+local function restore_site_wireless_if_owned()
+	if not own_preserve_channels then
+		return
+	end
+
+	uci:delete('gluon', 'wireless', 'preserve_channels')
+	uci:set('pump', 'settings', 'preserve_channels', '0')
+	own_preserve_channels = false
+	uci:save('gluon')
+	uci:save('pump')
+	os.execute('/lib/gluon/upgrade/200-wireless')
+end
+
+local function apply_radio_settings(radio)
+	local radio_name = radio['.name']
+	local mode = selected_mode()
+
+	ensure_preserve_channels()
+
+	if mode == 'sta' then
+		-- The station side shall not be pinned to a channel; it scans for any AP
+		-- with the generated PUMP SSID and negotiates channel/width with it.
+		uci:set('wireless', radio_name, 'channel', 'auto')
+	else
+		local channel = uci:get('pump', 'settings', radio_name .. '_channel') or uci:get('wireless', radio_name, 'channel') or 'auto'
+		uci:set('wireless', radio_name, 'channel', channel)
+	end
+
+	local htmode = uci:get('pump', 'settings', radio_name .. '_htmode')
+	if htmode == nil or htmode == '' or htmode == 'auto' then
+		htmode = best_htmode(radio) or uci:get('wireless', radio_name, 'htmode') or 'HT20'
+	end
+	uci:set('wireless', radio_name, 'htmode', htmode)
 end
 
 local function configure_network(name, enabled)
@@ -63,6 +138,8 @@ local function configure_wireless(radio, index, enabled)
 		return
 	end
 
+	apply_radio_settings(radio)
+
 	local macaddr = wireless.get_wlan_mac(uci, radio, index, 3)
 	if not macaddr then
 		uci:set('wireless', name, 'disabled', true)
@@ -87,11 +164,16 @@ ensure_settings()
 
 local globally_enabled = uci:get_bool('pump', 'settings', 'enabled') and pump.config_is_valid()
 
+if not globally_enabled then
+	restore_site_wireless_if_owned()
+end
+
 wireless.foreach_radio(uci, function(radio, index)
 	local radio_name = radio['.name']
 	configure_wireless(radio, index, globally_enabled and selected_radio_matches(radio_name))
 end)
 
 uci:save('pump')
+uci:save('gluon')
 uci:save('network')
 uci:save('wireless')

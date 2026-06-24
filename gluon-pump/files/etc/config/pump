@@ -3,3 +3,6 @@ config settings 'settings'
 	option mode 'ap'
 	option radio 'all'
 	option mesh_no_rebroadcast '0'
+	# Internal ownership flag: set to 1 only when PUMP enabled
+	# gluon.wireless.preserve_channels itself.
+	option preserve_channels '0'

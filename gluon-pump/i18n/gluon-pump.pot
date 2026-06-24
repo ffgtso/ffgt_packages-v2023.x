@@ -48,5 +48,11 @@ msgstr ""
 msgid "Channel"
 msgstr ""
 
+msgid "HT mode"
+msgstr ""
+
 msgid "(automatic)"
+msgstr ""
+
+msgid "(automatic / best available)"
 msgstr ""

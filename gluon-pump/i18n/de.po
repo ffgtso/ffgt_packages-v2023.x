@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: gluon-pump\n"
-"PO-Revision-Date: 2026-06-23 00:00+0200\n"
+"PO-Revision-Date: 2026-06-24 00:00+0200\n"
 "Language-Team: German\n"
 "Language: de\n"
 "MIME-Version: 1.0\n"
@@ -54,5 +54,11 @@ msgstr "Konfigurationswarnung"
 msgid "Channel"
 msgstr "Kanal"
 
+msgid "HT mode"
+msgstr "HT-Modus"
+
 msgid "(automatic)"
 msgstr "(automatisch)"
+
+msgid "(automatic / best available)"
+msgstr "(automatisch / bester verfügbarer Modus)"

@@ -52,12 +52,70 @@ angezeigt. Editierbar sind:
 * `enabled`: PUMP aktivieren/deaktivieren
 * `mode`: `ap` oder `sta`
 * `radio`: `all`, `radio0`, `radio1`, ...
-* Funkkanal je Radio: wird in `wireless.<radio>.channel` gespeichert
+* Kanal je ausgewähltem Radio, aber nur im AP-Modus
+* HT-Modus je ausgewähltem Radio, im AP- und STA-Modus
 
-Sobald über PUMP ein Kanal gespeichert wird, setzt das Paket
-`gluon.wireless.preserve_channels=1`. Das ist notwendig, weil Gluons
-`200-wireless` die WLAN-Kanäle bei Upgrades sonst wieder aus `site.conf`
-wiederherstellt.
+Kanal und HT-Modus werden Gluon-/OpenWrt-konform am jeweiligen `wifi-device`
+gespeichert:
+
+```uci
+config wifi-device 'radio1'
+	option channel '44'
+	option htmode 'VHT80'
+```
+
+Zusätzlich speichert PUMP die im Config-Mode gewählten Werte unter
+`pump.settings.radioX_channel` und `pump.settings.radioX_htmode`, damit das
+Upgrade-Script die Werte deterministisch erneut auf die `wireless`-Konfiguration
+anwenden kann.
+
+## AP- und STA-Verhalten
+
+### AP-Modus
+
+Im AP-Modus kann für jedes ausgewählte Radio ein Kanal und ein HT-Modus
+festgelegt werden. Nicht ausgewählte Radios zeigen im Config-Mode keine
+PUMP-Kanal-/HT-Felder und werden vom PUMP-Upgrade-Script nicht verändert.
+
+Sobald PUMP Kanal oder HT-Modus verwaltet, setzt das Paket:
+
+```sh
+uci set gluon.wireless.preserve_channels='1'
+```
+
+Das ist notwendig, weil Gluons `200-wireless` die WLAN-Kanäle bei Upgrades sonst
+wieder aus `site.conf` und die Kanalbreite auf Gluons Default zurücksetzt.
+
+### STA-Modus
+
+Im STA-Modus gibt es bewusst keine Kanalauswahl. Die STA-Seite soll jeden AP mit
+der generierten PUMP-SSID finden können. Das Paket setzt das ausgewählte Radio
+auf:
+
+```uci
+option channel 'auto'
+```
+
+Der HT-Modus bleibt auswählbar. Bei `automatic / best available` wählt das Paket
+den höchsten vom Treiber gemeldeten Modus in dieser Reihenfolge:
+
+```text
+HE160, HE80, HE40, HE20, VHT160, VHT80, VHT40, VHT20, HT40, HT20
+```
+
+Die konkrete Kanalbreite der Verbindung wird dann mit dem AP ausgehandelt.
+
+## Rückkehr zur site.conf
+
+Wenn PUMP deaktiviert wird und PUMP selbst zuvor
+`gluon.wireless.preserve_channels=1` gesetzt hatte, entfernt das Paket diese
+Option wieder und ruft `/lib/gluon/upgrade/200-wireless` auf. Dadurch greifen
+wieder die WLAN-Einstellungen der `site.conf`, also insbesondere Kanal und
+Gluon-Default-HT-Modus.
+
+Hat `gluon.wireless.preserve_channels` bereits vor PUMP auf `1` gestanden,
+betrachtet PUMP diese Einstellung nicht als Eigentum des Pakets und löscht sie
+beim Deaktivieren nicht.
 
 ## UCI
 
@@ -69,6 +127,7 @@ config settings 'settings'
 	option mode 'ap'
 	option radio 'all'
 	option mesh_no_rebroadcast '0'
+	option preserve_channels '0' # intern: PUMP-Ownership für preserve_channels
 ```
 
 Beispiel AP-Seite:
@@ -77,33 +136,48 @@ Beispiel AP-Seite:
 uci set pump.settings.enabled='1'
 uci set pump.settings.mode='ap'
 uci set pump.settings.radio='radio1'
-uci set wireless.radio1.channel='44'
-uci set gluon.wireless.preserve_channels='1'
+uci set pump.settings.radio1_channel='44'
+uci set pump.settings.radio1_htmode='VHT80'
 uci commit pump
-uci commit gluon
-uci commit wireless
 /lib/gluon/upgrade/335-gluon-pump
+uci commit gluon
 uci commit network
+uci commit wireless
 wifi reload
 ```
 
-Beispiel STA-Seite:
+Das Upgrade-Script setzt daraus zusätzlich:
+
+```uci
+config wifi-device 'radio1'
+	option channel '44'
+	option htmode 'VHT80'
+```
+
+Beispiel STA-Seite mit automatischem/bestem HT-Modus:
 
 ```sh
 uci set pump.settings.enabled='1'
 uci set pump.settings.mode='sta'
 uci set pump.settings.radio='radio1'
-uci set wireless.radio1.channel='44'
-uci set gluon.wireless.preserve_channels='1'
+uci set pump.settings.radio1_htmode='auto'
 uci commit pump
-uci commit gluon
-uci commit wireless
 /lib/gluon/upgrade/335-gluon-pump
+uci commit gluon
 uci commit network
+uci commit wireless
 wifi reload
 ```
 
-Das Upgrade-Script erzeugt pro ausgewähltem Radio:
+Das Upgrade-Script setzt daraus:
+
+```uci
+config wifi-device 'radio1'
+	option channel 'auto'
+	option htmode '<bester unterstützter Modus>'
+```
+
+Das Upgrade-Script erzeugt pro ausgewähltem Radio außerdem:
 
 ```uci
 config interface 'pump_radio1'
@@ -116,8 +190,6 @@ config wifi-iface 'pump_radio1'
 	option network 'pump_radio1'
 	option mode 'ap'      # oder 'sta'
 	option ifname 'pump1'
-	# Der Kanal steht nicht am wifi-iface, sondern am wifi-device:
-	# wireless.radio1.channel='44'
 	option ssid 'PUMP-...'
 	option key '...prefix6...'
 	option encryption 'psk3-mixed'
@@ -157,7 +229,7 @@ GLUON_SITE_PACKAGES += gluon-pump
 * Erfordert Gluon ab `v2023.1.x`.
 * Erfordert batman-adv, also typischerweise `mesh-batman-adv-15`.
 * Erfordert WPA3-Support über `gluon-wireless-encryption-wpa3`.
-* Erfordert `libiwinfo-lua` für die Gluon-konforme Kanalliste im Config-Mode.
+* Erfordert `libiwinfo-lua` für Kanal- und HT-Modus-Listen im Config-Mode.
 * `gluon.core.domain` darf inklusive Präfix `PUMP-` maximal 32 Zeichen ergeben.
   Ist die SSID länger, wird PUMP nicht aktiviert und im Config-Mode wird eine
   Warnung angezeigt.

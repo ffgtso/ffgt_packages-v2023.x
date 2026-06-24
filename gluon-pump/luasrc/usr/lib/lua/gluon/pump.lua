@@ -51,4 +51,9 @@ function M.ifname(radio_name)
 	return suffix and ('pump' .. suffix) or nil
 end
 
+function M.radio_selected(selected, radio_name)
+	selected = non_empty(selected) or 'all'
+	return selected == 'all' or selected == radio_name
+end
+
 return M

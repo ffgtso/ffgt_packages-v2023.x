@@ -1,10 +1,10 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=gluon-pump
-PKG_VERSION:=0.1.2
+PKG_VERSION:=0.1.3
 PKG_RELEASE:=1
 
-PKG_MAINTAINER:=4830.org e. V. <wusel+src@4830.org>
+PKG_MAINTAINER:=Freifunk <firmware@freifunk.net>
 PKG_LICENSE:=MIT
 
 include $(TOPDIR)/../package/gluon.mk
