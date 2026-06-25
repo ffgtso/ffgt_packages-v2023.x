@@ -13,6 +13,8 @@ local function ensure_settings()
 			radio = 'all',
 			mesh_no_rebroadcast = false,
 			preserve_channels = false,
+			uplink_enabled = false,
+			uplink_encryption = 'auto',
 		})
 	end
 end
@@ -20,6 +22,14 @@ end
 local function ensure_gluon_wireless()
 	if not uci:get('gluon', 'wireless') then
 		uci:section('gluon', 'wireless', 'wireless', {})
+	end
+end
+
+local function ensure_network_wan()
+	if not uci:get('network', 'wan') then
+		uci:section('network', 'interface', 'wan', {
+			proto = 'dhcp',
+		})
 	end
 end
 
@@ -82,7 +92,6 @@ local function restore_site_wireless_if_owned()
 	os.execute('/lib/gluon/upgrade/200-wireless')
 end
 
-
 local function saved_disabled_option(iface_name)
 	return 'iface_' .. iface_name:gsub('[^%w_]', '_') .. '_disabled'
 end
@@ -133,6 +142,20 @@ local function set_non_pump_ifaces_disabled(radio_name, disabled)
 	end)
 end
 
+local function set_radio_exclusive(radio_name, keep_iface_name)
+	uci:foreach('wireless', 'wifi-iface', function(iface)
+		local iface_name = iface['.name']
+		if iface.device ~= radio_name then
+			return
+		end
+		if iface_name == keep_iface_name then
+			return
+		end
+
+		remember_and_disable_iface(iface_name)
+	end)
+end
+
 local function restore_all_saved_ifaces()
 	uci:foreach('wireless', 'wifi-iface', function(iface)
 		local iface_name = iface['.name']
@@ -164,6 +187,14 @@ local function apply_radio_settings(radio)
 	uci:set('wireless', radio_name, 'htmode', htmode)
 end
 
+local function apply_uplink_radio_settings(radio)
+	local radio_name = radio['.name']
+
+	ensure_preserve_channels()
+	uci:set('wireless', radio_name, 'channel', 'auto')
+	uci:set('wireless', radio_name, 'htmode', best_htmode(radio) or uci:get('wireless', radio_name, 'htmode') or 'HT20')
+end
+
 local function configure_network(name, enabled)
 	uci:section('network', 'interface', name, {
 		proto = 'gluon_mesh',
@@ -184,7 +215,7 @@ local function configure_network(name, enabled)
 	end
 end
 
-local function configure_wireless(radio, index, enabled)
+local function configure_pump_wireless(radio, index, enabled)
 	local radio_name = radio['.name']
 	local name = pump.iface_name(radio_name)
 	local mode = selected_mode()
@@ -226,19 +257,105 @@ local function configure_wireless(radio, index, enabled)
 	})
 end
 
+local function normalize_uplink_encryption(encryption)
+	encryption = pump.non_empty(encryption) or 'psk2'
+	if encryption == 'auto' then
+		return 'psk2'
+	end
+	return encryption
+end
+
+local function set_uplink_pmf(name, encryption)
+	if encryption == 'sae' then
+		uci:set('wireless', name, 'ieee80211w', '2')
+	elseif encryption == 'psk3-mixed' or encryption == 'sae-mixed' then
+		uci:set('wireless', name, 'ieee80211w', '1')
+	else
+		uci:delete('wireless', name, 'ieee80211w')
+	end
+end
+
+local function configure_wifi_uplink(radio, index, enabled)
+	local radio_name = radio and radio['.name'] or nil
+	local name = pump.uplink_iface_name()
+
+	if not enabled or not radio_name then
+		if uci:get('wireless', name) then
+			uci:set('wireless', name, 'disabled', true)
+		end
+		return
+	end
+
+	ensure_network_wan()
+	set_radio_exclusive(radio_name, name)
+	apply_uplink_radio_settings(radio)
+
+	local macaddr = wireless.get_wlan_mac(uci, radio, index, 4)
+	if not macaddr then
+		uci:set('wireless', name, 'disabled', true)
+		return
+	end
+
+	local ssid = uci:get('pump', 'settings', 'uplink_ssid')
+	local bssid = pump.non_empty(uci:get('pump', 'settings', 'uplink_bssid'))
+	local encryption = normalize_uplink_encryption(uci:get('pump', 'settings', 'uplink_encryption'))
+
+	uci:section('wireless', 'wifi-iface', name, {
+		device = radio_name,
+		network = 'wan',
+		mode = 'sta',
+		encryption = encryption,
+		ssid = ssid,
+		macaddr = macaddr,
+		ifname = pump.uplink_ifname(),
+		disabled = false,
+	})
+
+	if bssid then
+		uci:set('wireless', name, 'bssid', bssid)
+	else
+		uci:delete('wireless', name, 'bssid')
+	end
+
+	if pump.encryption_uses_key(encryption) then
+		uci:set('wireless', name, 'key', uci:get('pump', 'settings', 'uplink_key'))
+	else
+		uci:delete('wireless', name, 'key')
+	end
+
+	set_uplink_pmf(name, encryption)
+end
+
 ensure_settings()
 
-local globally_enabled = uci:get_bool('pump', 'settings', 'enabled') and pump.config_is_valid()
+-- Clear stale exclusive-radio disables first. Active exclusive modes will
+-- immediately save and apply their current disable set again below.
+restore_all_saved_ifaces()
 
-if not globally_enabled then
-	restore_all_saved_ifaces()
+local pump_enabled = uci:get_bool('pump', 'settings', 'enabled') and pump.config_is_valid()
+local uplink_enabled = uci:get_bool('pump', 'settings', 'uplink_enabled') and pump.uplink_config_is_valid()
+local uplink_radio = pump.non_empty(uci:get('pump', 'settings', 'uplink_radio'))
+
+if not pump_enabled and not uplink_enabled then
 	restore_site_wireless_if_owned()
 end
 
+local uplink_radio_config = nil
+local uplink_radio_index = nil
+
 wireless.foreach_radio(uci, function(radio, index)
 	local radio_name = radio['.name']
-	configure_wireless(radio, index, globally_enabled and selected_radio_matches(radio_name))
+	local radio_is_uplink = uplink_enabled and uplink_radio == radio_name
+
+	if radio_is_uplink then
+		uplink_radio_config = radio
+		uplink_radio_index = index
+	end
+
+	configure_pump_wireless(radio, index, pump_enabled and selected_radio_matches(radio_name) and not radio_is_uplink)
 end)
+
+configure_wifi_uplink(uplink_radio_config, uplink_radio_index, uplink_enabled)
 
 uci:save('pump')
 uci:save('gluon')

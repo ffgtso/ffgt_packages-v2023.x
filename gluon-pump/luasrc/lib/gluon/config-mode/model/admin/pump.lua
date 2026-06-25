@@ -215,8 +215,12 @@ local function restore_site_wireless_if_owned()
 	return false
 end
 
-local function write_radio_options(radio_name, options)
+local function write_radio_options(radio_name, options, uplink_radio_name)
 	if not enabled.data then
+		return
+	end
+
+	if uplink_radio_name == radio_name then
 		return
 	end
 
@@ -253,25 +257,215 @@ local function write_radio_options(radio_name, options)
 	uci:set('wireless', radio_name, 'htmode', htmode_data)
 end
 
+local function table_to_string(value)
+	if type(value) ~= 'table' then
+		return tostring(value or '')
+	end
+
+	local parts = {}
+	for _, v in pairs(value) do
+		parts[#parts + 1] = tostring(v)
+	end
+	return table.concat(parts, ' ')
+end
+
+local function encryption_description(entry)
+	local enc = entry.encryption
+	if not enc or not enc.enabled then
+		return translate('open')
+	end
+
+	if enc.description and enc.description ~= '' then
+		return tostring(enc.description)
+	end
+
+	local auth = table_to_string(enc.auth_suites or enc.authentication):upper()
+	if auth:match('SAE') and auth:match('PSK') then
+		return 'WPA2/WPA3 PSK/SAE'
+	elseif auth:match('SAE') then
+		return 'WPA3 SAE'
+	elseif tonumber(enc.wpa) and tonumber(enc.wpa) >= 2 then
+		return 'WPA2 PSK'
+	elseif tonumber(enc.wpa) and tonumber(enc.wpa) == 1 then
+		return 'WPA PSK'
+	end
+
+	return translate('encrypted')
+end
+
+local function encryption_to_uci(entry)
+	local enc = entry.encryption
+	if not enc or not enc.enabled then
+		return 'none'
+	end
+
+	local auth = table_to_string(enc.auth_suites or enc.authentication):upper()
+	if auth:match('802%.1X') or auth:match('EAP') then
+		return nil
+	end
+
+	if auth:match('SAE') and auth:match('PSK') then
+		return 'psk3-mixed'
+	elseif auth:match('SAE') then
+		return 'sae'
+	elseif tonumber(enc.wpa) and tonumber(enc.wpa) >= 2 then
+		return 'psk2'
+	elseif tonumber(enc.wpa) and tonumber(enc.wpa) == 1 then
+		return 'psk'
+	end
+
+	-- Most personal WLANs expose enough scan metadata to be detected above. If
+	-- metadata is incomplete but the BSS is encrypted, use WPA2-PSK as the least
+	-- surprising fallback for a home/office uplink.
+	return 'psk2'
+end
+
+local scan_entries = {}
+local scan_order = {}
+
+local function scan_radio_networks(radio_name, radio_config)
+	local phy = wireless.find_phy(radio_config)
+	if not phy then
+		return
+	end
+
+	local ok, scanlist = pcall(iwinfo.nl80211.scanlist, phy)
+	if not ok or not scanlist then
+		return
+	end
+
+	for _, entry in ipairs(scanlist) do
+		local entry_ssid = pump.non_empty(entry.ssid)
+		local bssid = pump.non_empty(entry.bssid)
+		local uci_encryption = encryption_to_uci(entry)
+
+		if entry_ssid and bssid and uci_encryption then
+			local value = radio_name .. '|' .. bssid
+			local channel = entry.channel and ('ch ' .. tostring(entry.channel)) or translate('channel unknown')
+			local signal = entry.signal and (tostring(entry.signal) .. ' dBm') or translate('signal unknown')
+			local label = string.format('%s: %s (%s, %s, %s, %s)', radio_name, entry_ssid, bssid, channel, signal, encryption_description(entry))
+
+			scan_entries[value] = {
+				radio = radio_name,
+				ssid = entry_ssid,
+				bssid = bssid,
+				encryption = uci_encryption,
+				label = label,
+			}
+			scan_order[#scan_order + 1] = value
+		end
+	end
+end
+
+for radio_name, radio_config in pairs(radio_configs) do
+	scan_radio_networks(radio_name, radio_config)
+end
+
+table.sort(scan_order, function(a, b)
+	local ea = scan_entries[a]
+	local eb = scan_entries[b]
+	if ea.radio == eb.radio then
+		return ea.ssid < eb.ssid
+	end
+	return ea.radio < eb.radio
+end)
+
+local us = f:section(Section, translate('WiFi uplink'), translate(
+	'Select one of the received WLANs as a WAN uplink. The selected radio is used ' ..
+	'exclusively for this WAN replacement; all other wireless interfaces on that radio ' ..
+	'are disabled while the WiFi uplink is active.'
+))
+
+local uplink_enabled = us:option(Flag, 'uplink_enabled', translate('Enabled'))
+uplink_enabled.default = uci:get_bool('pump', 'settings', 'uplink_enabled') and pump.uplink_config_is_valid()
+
+local uplink_network = us:option(ListValue, '_uplink_network', translate('Upstream network'))
+uplink_network:depends(uplink_enabled, true)
+
+local stored_uplink_radio = pump.non_empty(uci:get('pump', 'settings', 'uplink_radio'))
+local stored_uplink_ssid = pump.non_empty(uci:get('pump', 'settings', 'uplink_ssid'))
+local stored_uplink_bssid = pump.non_empty(uci:get('pump', 'settings', 'uplink_bssid'))
+local stored_uplink_encryption = pump.non_empty(uci:get('pump', 'settings', 'uplink_encryption')) or 'psk2'
+local stored_uplink_value = stored_uplink_radio and stored_uplink_bssid and (stored_uplink_radio .. '|' .. stored_uplink_bssid) or nil
+
+if stored_uplink_value and not scan_entries[stored_uplink_value] and stored_uplink_ssid then
+	uplink_network:value(stored_uplink_value, string.format('%s: %s (%s, %s)', stored_uplink_radio, stored_uplink_ssid, stored_uplink_bssid, translate('configured; currently not seen')))
+	scan_entries[stored_uplink_value] = {
+		radio = stored_uplink_radio,
+		ssid = stored_uplink_ssid,
+		bssid = stored_uplink_bssid,
+		encryption = stored_uplink_encryption,
+		label = stored_uplink_ssid,
+	}
+end
+
+if #scan_order == 0 and not stored_uplink_value then
+	uplink_network:value('', translate('No supported networks found'))
+else
+	for _, value in ipairs(scan_order) do
+		local entry = scan_entries[value]
+		uplink_network:value(value, entry.label)
+	end
+end
+
+uplink_network.default = stored_uplink_value or ''
+
+local uplink_key = us:option(Value, 'uplink_key', translate('Uplink passphrase'))
+uplink_key:depends(uplink_enabled, true)
+uplink_key.default = uci:get('pump', 'settings', 'uplink_key') or ''
+uplink_key.password = true
+uplink_key.description = translate('Required for encrypted upstream networks; ignored for open networks.')
+
+local uplink_info = us:option(Value, '_uplink_info', translate('Current uplink'))
+uplink_info.readonly = true
+function uplink_info:cfgvalue()
+	if stored_uplink_radio and stored_uplink_ssid then
+		return string.format('%s / %s / %s', stored_uplink_radio, stored_uplink_ssid, stored_uplink_encryption)
+	end
+	return translate('not configured')
+end
+function uplink_info:write()
+	-- informational only
+end
+
 function f:write()
 	if not uci:get('pump', 'settings') then
 		uci:section('pump', 'settings', 'settings', {})
 	end
 
-	local new_enabled = enabled.data and pump.config_is_valid()
+	local new_pump_enabled = enabled.data and pump.config_is_valid()
 	local new_mode = mode.data == 'sta' and 'sta' or 'ap'
 	local new_radio = radio.data or 'all'
 
-	uci:set('pump', 'settings', 'enabled', new_enabled and '1' or '0')
+	uci:set('pump', 'settings', 'enabled', new_pump_enabled and '1' or '0')
 	uci:set('pump', 'settings', 'mode', new_mode)
 	uci:set('pump', 'settings', 'radio', new_radio)
 
-	local should_restore_site_wireless = false
-	if new_enabled then
-		for radio_name, options in pairs(radio_options) do
-			write_radio_options(radio_name, options)
-		end
+	local selected_uplink = scan_entries[uplink_network.data or '']
+	local new_uplink_enabled = uplink_enabled.data and selected_uplink ~= nil and pump.non_empty(selected_uplink.ssid) ~= nil and pump.non_empty(selected_uplink.radio) ~= nil
+
+	uci:set('pump', 'settings', 'uplink_enabled', new_uplink_enabled and '1' or '0')
+	uci:set('pump', 'settings', 'uplink_key', uplink_key.data or '')
+
+	if new_uplink_enabled then
+		uci:set('pump', 'settings', 'uplink_radio', selected_uplink.radio)
+		uci:set('pump', 'settings', 'uplink_ssid', selected_uplink.ssid)
+		uci:set('pump', 'settings', 'uplink_bssid', selected_uplink.bssid)
+		uci:set('pump', 'settings', 'uplink_encryption', selected_uplink.encryption)
 	else
+		uci:set('pump', 'settings', 'uplink_enabled', '0')
+	end
+
+	local uplink_radio_name = new_uplink_enabled and selected_uplink.radio or nil
+	local should_restore_site_wireless = false
+
+	if new_pump_enabled then
+		for radio_name, options in pairs(radio_options) do
+			write_radio_options(radio_name, options, uplink_radio_name)
+		end
+	end
+
+	if not new_pump_enabled and not new_uplink_enabled then
 		should_restore_site_wireless = restore_site_wireless_if_owned()
 	end
 

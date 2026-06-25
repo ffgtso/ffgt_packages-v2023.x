@@ -6,5 +6,15 @@ config settings 'settings'
 	# Internal ownership flag: set to 1 only when PUMP enabled
 	# gluon.wireless.preserve_channels itself.
 	option preserve_channels '0'
-	# Internal keys named iface_*_disabled are created while STA mode disables
-	# other wifi-ifaces on the selected radio and are removed again on restore.
+
+	# WiFi uplink: use an upstream WLAN as Gluon's WAN replacement.
+	option uplink_enabled '0'
+	option uplink_radio ''
+	option uplink_ssid ''
+	option uplink_bssid ''
+	option uplink_encryption 'auto'
+	option uplink_key ''
+
+	# Internal keys named iface_*_disabled are created while an exclusive
+	# PUMP STA or WiFi uplink radio disables other wifi-ifaces on the selected
+	# radio and are removed again on restore.

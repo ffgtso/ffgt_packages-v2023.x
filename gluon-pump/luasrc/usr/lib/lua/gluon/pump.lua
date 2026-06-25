@@ -16,6 +16,10 @@ local function non_empty(value)
 	return value
 end
 
+function M.non_empty(value)
+	return non_empty(value)
+end
+
 function M.domain_code()
 	return non_empty(uci:get('gluon', 'core', 'domain')) or 'nix'
 end
@@ -33,9 +37,13 @@ function M.ssid_is_valid()
 	return ssid ~= nil and #ssid >= 1 and #ssid <= 32
 end
 
-function M.key_is_valid()
-	local key = M.key()
+function M.wpa_key_is_valid(key)
+	key = non_empty(key)
 	return key ~= nil and #key >= 8 and #key <= 63 and key:match('^[ -~]+$') ~= nil
+end
+
+function M.key_is_valid()
+	return M.wpa_key_is_valid(M.key())
 end
 
 function M.config_is_valid()
@@ -51,9 +59,38 @@ function M.ifname(radio_name)
 	return suffix and ('pump' .. suffix) or nil
 end
 
+function M.uplink_iface_name()
+	return 'pump_uplink'
+end
+
+function M.uplink_ifname()
+	return 'pumpwan'
+end
+
 function M.radio_selected(selected, radio_name)
 	selected = non_empty(selected) or 'all'
 	return selected == 'all' or selected == radio_name
+end
+
+function M.encryption_uses_key(encryption)
+	encryption = non_empty(encryption) or 'psk2'
+	return encryption ~= 'none'
+end
+
+function M.uplink_config_is_valid()
+	local ssid = non_empty(uci:get('pump', 'settings', 'uplink_ssid'))
+	local radio = non_empty(uci:get('pump', 'settings', 'uplink_radio'))
+	local encryption = non_empty(uci:get('pump', 'settings', 'uplink_encryption')) or 'psk2'
+
+	if not ssid or not radio then
+		return false
+	end
+
+	if M.encryption_uses_key(encryption) then
+		return M.wpa_key_is_valid(uci:get('pump', 'settings', 'uplink_key'))
+	end
+
+	return true
 end
 
 return M

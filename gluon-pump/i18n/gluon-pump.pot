@@ -1,7 +1,5 @@
 msgid ""
-msgstr ""
-"Project-Id-Version: gluon-pump\n"
-"Content-Type: text/plain; charset=UTF-8\n"
+msgstr "Content-Type: text/plain; charset=UTF-8\n"
 
 msgid "PUMP"
 msgstr ""
@@ -19,6 +17,9 @@ msgid "The generated PUMP SSID is longer than 32 characters. Shorten the domain 
 msgstr ""
 
 msgid "The generated PUMP passphrase is not a valid WPA key. prefix6 must be 8-63 printable ASCII characters."
+msgstr ""
+
+msgid "Configuration warning"
 msgstr ""
 
 msgid "Enabled"
@@ -42,9 +43,6 @@ msgstr ""
 msgid "unknown band"
 msgstr ""
 
-msgid "Configuration warning"
-msgstr ""
-
 msgid "Channel"
 msgstr ""
 
@@ -55,4 +53,43 @@ msgid "(automatic)"
 msgstr ""
 
 msgid "(automatic / best available)"
+msgstr ""
+
+msgid "WiFi uplink"
+msgstr ""
+
+msgid "Select one of the received WLANs as a WAN uplink. The selected radio is used exclusively for this WAN replacement; all other wireless interfaces on that radio are disabled while the WiFi uplink is active."
+msgstr ""
+
+msgid "Upstream network"
+msgstr ""
+
+msgid "Uplink passphrase"
+msgstr ""
+
+msgid "Required for encrypted upstream networks; ignored for open networks."
+msgstr ""
+
+msgid "Current uplink"
+msgstr ""
+
+msgid "not configured"
+msgstr ""
+
+msgid "configured; currently not seen"
+msgstr ""
+
+msgid "No supported networks found"
+msgstr ""
+
+msgid "open"
+msgstr ""
+
+msgid "encrypted"
+msgstr ""
+
+msgid "channel unknown"
+msgstr ""
+
+msgid "signal unknown"
 msgstr ""

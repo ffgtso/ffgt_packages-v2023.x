@@ -29,6 +29,12 @@ Die PUMP-WLAN-Verbindung ist dabei kein Clientnetz und kein WAN-Uplink. Sie
 ist ein zusätzlicher batman-adv-Hardif. Layer-3, Gatewayauswahl, Clientbridge
 und Mesh-VPN bleiben unverändert beim vorhandenen Gluon-Setup.
 
+Zusätzlich enthält das Paket einen Konfigurationsabschnitt **WiFi-Uplink**.
+Damit kann ein empfangenes WLAN als upstream WAN verwendet werden, wenn kein
+Ethernet-WAN vorhanden ist oder der Knoten bewusst per WLAN ins Internet
+gebracht werden soll. Dieser Modus ist kein Batman-Transport, sondern bindet
+ein STA-WLAN-Interface an Gluons `wan`-Netz.
+
 ## Benennung und Konfiguration
 
 Das Paket verwendet konsequent den Bezeichner `pump`:
@@ -54,6 +60,7 @@ angezeigt. Editierbar sind:
 * `radio`: `all`, `radio0`, `radio1`, ...
 * Kanal je ausgewähltem Radio, aber nur im AP-Modus
 * HT-Modus je ausgewähltem Radio, im AP- und STA-Modus
+* WiFi-Uplink: Auswahl eines empfangenen WLANs als WAN-Ersatz
 
 Kanal und HT-Modus werden Gluon-/OpenWrt-konform am jeweiligen `wifi-device`
 gespeichert:
@@ -113,9 +120,58 @@ vorherigen `disabled`-Status in internen `pump.settings.iface_*_disabled`-
 Optionen. Beim Wechsel zurück in den AP-Modus, bei Auswahl eines anderen Radios
 oder beim Deaktivieren von PUMP werden diese Zustände wiederhergestellt.
 
+
+## WiFi-Uplink
+
+Der Abschnitt **WiFi-Uplink** ist unabhängig von PUMP-AP/STA. Er scannt die
+verfügbaren Radios und bietet unterstützte empfangene WLANs im Config-Mode zur
+Auswahl an. Der ausgewählte Eintrag speichert:
+
+```uci
+option uplink_enabled '1'
+option uplink_radio 'radio1'
+option uplink_ssid 'UpstreamSSID'
+option uplink_bssid 'aa:bb:cc:dd:ee:ff'
+option uplink_encryption 'psk2'   # oder none, psk, sae, psk3-mixed
+option uplink_key '...'
+```
+
+Das Upgrade-Script erzeugt daraus ein dediziertes STA-Interface auf dem
+Gluon-WAN-Netz:
+
+```uci
+config wifi-iface 'pump_uplink'
+	option device 'radio1'
+	option network 'wan'
+	option mode 'sta'
+	option ifname 'pumpwan'
+	option ssid 'UpstreamSSID'
+	option bssid 'aa:bb:cc:dd:ee:ff'
+	option encryption 'psk2'
+	option key '...'
+```
+
+Der WiFi-Uplink verwendet das gewählte Radio exklusiv. Während er aktiv ist,
+werden alle anderen `wifi-iface`-Sections auf diesem Radio deaktiviert, auch
+Client-AP, 802.11s-Mesh oder ein PUMP-Interface. Die vorherigen `disabled`-
+Zustände werden unter internen `pump.settings.iface_*_disabled`-Optionen
+gesichert und beim Deaktivieren oder Radio-Wechsel wiederhergestellt.
+
+Für den WiFi-Uplink wird kein Kanal festgelegt. Das Radio wird auf
+`channel auto` gesetzt, damit der STA-Modus dem ausgewählten AP folgen kann.
+Der HT-Modus wird automatisch auf den besten vom Treiber gemeldeten Modus
+gesetzt. Sobald weder PUMP noch WiFi-Uplink aktiv sind und PUMP selbst
+`gluon.wireless.preserve_channels` gesetzt hatte, entfernt das Paket diese
+Option und ruft wieder `/lib/gluon/upgrade/200-wireless` auf; damit greifen
+wieder die WLAN-Einstellungen aus der `site.conf`.
+
+Unterstützt werden offene Netze sowie übliche WPA/WPA2/WPA3-Personal-Netze.
+Enterprise-/802.1X-Netze werden im Scan nicht als auswählbare Uplinks
+behandelt.
+
 ## Rückkehr zur site.conf
 
-Wenn PUMP deaktiviert wird und PUMP selbst zuvor
+Wenn PUMP und WiFi-Uplink deaktiviert sind und das Paket selbst zuvor
 `gluon.wireless.preserve_channels=1` gesetzt hatte, entfernt das Paket diese
 Option wieder und ruft `/lib/gluon/upgrade/200-wireless` auf. Dadurch greifen
 wieder die WLAN-Einstellungen der `site.conf`, also insbesondere Kanal und
@@ -135,7 +191,13 @@ config settings 'settings'
 	option mode 'ap'
 	option radio 'all'
 	option mesh_no_rebroadcast '0'
-	option preserve_channels '0' # intern: PUMP-Ownership für preserve_channels
+	option preserve_channels '0' # intern: Ownership für preserve_channels
+	option uplink_enabled '0'
+	option uplink_radio ''
+	option uplink_ssid ''
+	option uplink_bssid ''
+	option uplink_encryption 'auto'
+	option uplink_key ''
 ```
 
 Beispiel AP-Seite:
@@ -208,6 +270,27 @@ config wifi-iface 'pump_radio1'
 	option ieee80211w '1'
 ```
 
+
+Beispiel WiFi-Uplink:
+
+```sh
+uci set pump.settings.uplink_enabled='1'
+uci set pump.settings.uplink_radio='radio1'
+uci set pump.settings.uplink_ssid='UpstreamSSID'
+uci set pump.settings.uplink_bssid='aa:bb:cc:dd:ee:ff'
+uci set pump.settings.uplink_encryption='psk2'
+uci set pump.settings.uplink_key='upstream-passphrase'
+uci commit pump
+/lib/gluon/upgrade/335-gluon-pump
+uci commit gluon
+uci commit network
+uci commit wireless
+wifi reload
+```
+
+Das Upgrade-Script bindet den WiFi-Uplink direkt an `network.wan`; der Knoten
+verwendet ihn dadurch wie einen normalen WAN-Zugang.
+
 ## Einbindung in eine Site
 
 Als externen Feed einbinden, zum Beispiel in `modules`:
@@ -241,7 +324,7 @@ GLUON_SITE_PACKAGES += gluon-pump
 * Erfordert Gluon ab `v2023.1.x`.
 * Erfordert batman-adv, also typischerweise `mesh-batman-adv-15`.
 * Erfordert WPA3-AP-Support über `gluon-wireless-encryption-wpa3`.
-* Erfordert für den STA-Modus zusätzlich `wpa-supplicant-wolfssl`, da `hostapd-wolfssl` nur den Authenticator/AP-Teil bereitstellt.
+* Erfordert für PUMP-STA und WiFi-Uplink zusätzlich `wpa-supplicant-wolfssl`, da `hostapd-wolfssl` nur den Authenticator/AP-Teil bereitstellt.
 * Erfordert `libiwinfo-lua` für Kanal- und HT-Modus-Listen im Config-Mode.
 * `gluon.core.domain` darf inklusive Präfix `PUMP-` maximal 32 Zeichen ergeben.
   Ist die SSID länger, wird PUMP nicht aktiviert und im Config-Mode wird eine

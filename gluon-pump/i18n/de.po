@@ -62,3 +62,42 @@ msgstr "(automatisch)"
 
 msgid "(automatic / best available)"
 msgstr "(automatisch / bester verfügbarer Modus)"
+
+msgid "WiFi uplink"
+msgstr "WiFi-Uplink"
+
+msgid "Select one of the received WLANs as a WAN uplink. The selected radio is used exclusively for this WAN replacement; all other wireless interfaces on that radio are disabled while the WiFi uplink is active."
+msgstr "Wähle eines der empfangenen WLANs als WAN-Uplink. Das ausgewählte Radio wird exklusiv für diesen WAN-Ersatz verwendet; alle anderen WLAN-Interfaces auf diesem Radio werden deaktiviert, solange der WiFi-Uplink aktiv ist."
+
+msgid "Upstream network"
+msgstr "Upstream-Netz"
+
+msgid "Uplink passphrase"
+msgstr "Uplink-Passphrase"
+
+msgid "Required for encrypted upstream networks; ignored for open networks."
+msgstr "Erforderlich für verschlüsselte Upstream-Netze; wird bei offenen Netzen ignoriert."
+
+msgid "Current uplink"
+msgstr "Aktueller Uplink"
+
+msgid "not configured"
+msgstr "nicht konfiguriert"
+
+msgid "configured; currently not seen"
+msgstr "konfiguriert; derzeit nicht sichtbar"
+
+msgid "No supported networks found"
+msgstr "Keine unterstützten Netze gefunden"
+
+msgid "open"
+msgstr "offen"
+
+msgid "encrypted"
+msgstr "verschlüsselt"
+
+msgid "channel unknown"
+msgstr "Kanal unbekannt"
+
+msgid "signal unknown"
+msgstr "Signal unbekannt"
