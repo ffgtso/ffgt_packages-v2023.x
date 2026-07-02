@@ -12,7 +12,6 @@ define Package/wpa-supplicant-dummy
   SECTION:=ffgt
   CATEGORY:=Customization
   TITLE:=Implements a dummy /usr/sbin/wpa_supplicant for tecff-autoupdater-wifi-fallback
-  DEPENDS:=+tecff-autoupdater-wifi-fallback
 endef
 
 define Build/Prepare
