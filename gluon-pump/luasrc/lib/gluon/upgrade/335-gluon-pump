@@ -34,6 +34,88 @@ local function ensure_network_wan()
 	end
 end
 
+
+local function option_as_list(value)
+	if type(value) == 'table' then
+		return value
+	end
+	if value == nil or value == '' then
+		return {}
+	end
+
+	local values = {}
+	for item in tostring(value):gmatch('%S+') do
+		values[#values + 1] = item
+	end
+	return values
+end
+
+local function add_list_unique(config, section, option, value)
+	local values = option_as_list(uci:get(config, section, option))
+	for _, existing in ipairs(values) do
+		if existing == value then
+			return
+		end
+	end
+	values[#values + 1] = value
+	uci:set_list(config, section, option, values)
+end
+
+local function remove_list_value(config, section, option, value)
+	local values = option_as_list(uci:get(config, section, option))
+	local new_values = {}
+	local changed = false
+
+	for _, existing in ipairs(values) do
+		if existing == value then
+			changed = true
+		else
+			new_values[#new_values + 1] = existing
+		end
+	end
+
+	if not changed then
+		return
+	end
+
+	if #new_values == 0 then
+		uci:delete(config, section, option)
+	else
+		uci:set_list(config, section, option, new_values)
+	end
+end
+
+local function ensure_gluon_uplink_iface()
+	local section = pump.uplink_gluon_iface_section()
+
+	if not uci:get('gluon', section) then
+		uci:section('gluon', 'interface', section, {})
+	end
+
+	uci:set('gluon', section, 'name', pump.uplink_ifname())
+	uci:set_list('gluon', section, 'role', { 'uplink' })
+	uci:set('pump', 'settings', 'uplink_gluon_iface', '1')
+
+	-- Make the interface usable immediately after a plain wifi/network reload;
+	-- gluon-reconfigure will generate the same association from /etc/config/gluon.
+	ensure_network_wan()
+	add_list_unique('network', 'wan', 'ifname', pump.uplink_ifname())
+end
+
+local function remove_gluon_uplink_iface_if_owned()
+	if not uci:get_bool('pump', 'settings', 'uplink_gluon_iface') then
+		return
+	end
+
+	local section = pump.uplink_gluon_iface_section()
+	if uci:get('gluon', section, 'name') == pump.uplink_ifname() then
+		uci:delete('gluon', section)
+	end
+
+	remove_list_value('network', 'wan', 'ifname', pump.uplink_ifname())
+	uci:delete('pump', 'settings', 'uplink_gluon_iface')
+end
+
 local function selected_mode()
 	local mode = uci:get('pump', 'settings', 'mode')
 	if mode == 'sta' then
@@ -284,10 +366,12 @@ local function configure_wifi_uplink(radio, index, enabled)
 		if uci:get('wireless', name) then
 			uci:set('wireless', name, 'disabled', true)
 		end
+		remove_gluon_uplink_iface_if_owned()
 		return
 	end
 
 	ensure_network_wan()
+	ensure_gluon_uplink_iface()
 	set_radio_exclusive(radio_name, name)
 	apply_uplink_radio_settings(radio)
 
@@ -342,6 +426,7 @@ local uplink_radio = pump.non_empty(uci:get('pump', 'settings', 'uplink_radio'))
 
 if not pump_enabled and not uplink_enabled then
 	restore_site_wireless_if_owned()
+	remove_gluon_uplink_iface_if_owned()
 end
 
 local uplink_radio_config = nil

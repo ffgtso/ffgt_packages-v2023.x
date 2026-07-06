@@ -486,6 +486,11 @@ function f:write()
 		uci:section('pump', 'settings', 'settings', {})
 	end
 
+	local old_uplink_enabled = uci:get_bool('pump', 'settings', 'uplink_enabled')
+	local old_uplink_radio = pump.non_empty(uci:get('pump', 'settings', 'uplink_radio'))
+	local old_uplink_ssid = pump.non_empty(uci:get('pump', 'settings', 'uplink_ssid'))
+	local old_uplink_bssid = pump.non_empty(uci:get('pump', 'settings', 'uplink_bssid'))
+
 	local new_pump_enabled = enabled.data and pump.config_is_valid()
 	local new_mode = mode.data == 'sta' and 'sta' or 'ap'
 	local new_radio = radio.data or 'all'
@@ -548,9 +553,37 @@ function f:write()
 		uci:commit('wireless')
 	end
 
+	local uplink_changed = old_uplink_enabled ~= new_uplink_enabled
+		or old_uplink_radio ~= (new_uplink_enabled and selected_uplink.radio or nil)
+		or old_uplink_ssid ~= (new_uplink_enabled and selected_uplink.ssid or nil)
+		or old_uplink_bssid ~= (new_uplink_enabled and pump.non_empty(uplink_bssid.data) or nil)
+
+	if uplink_changed or new_uplink_enabled then
+		-- WiFi uplink is a Gluon uplink interface, not just a wireless VIF.
+		-- First materialize gluon.iface_pumpwan, then rebuild /etc/config/network
+		-- from /etc/config/gluon. The later direct upgrade call remains a fallback
+		-- for builds without gluon-reconfigure and reapplies wireless details after
+		-- Gluon regenerated the base configuration.
+		os.execute('/lib/gluon/upgrade/335-gluon-pump')
+		uci:commit('pump')
+		uci:commit('gluon')
+		uci:commit('network')
+		uci:commit('wireless')
+		os.execute('command -v gluon-reconfigure >/dev/null 2>&1 && gluon-reconfigure >/dev/null 2>&1')
+	end
+
 	os.execute('/lib/gluon/upgrade/335-gluon-pump')
+	uci:commit('pump')
 	uci:commit('network')
+	uci:commit('gluon')
 	uci:commit('wireless')
+
+	if uplink_changed or new_uplink_enabled then
+		-- Apply the newly created STA VIF for immediate testing; a normal reboot
+		-- after leaving Config Mode would do the same.
+		os.execute('/etc/init.d/network reload >/dev/null 2>&1')
+		os.execute('wifi reload >/dev/null 2>&1')
+	end
 end
 
 return f

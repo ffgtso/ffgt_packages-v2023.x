@@ -16,6 +16,7 @@ config settings 'settings'
 	option uplink_bssid_lock '1'
 	option uplink_encryption 'auto'
 	option uplink_key ''
+	option uplink_gluon_iface '0'
 
 	# Internal keys named iface_*_disabled are created while an exclusive
 	# PUMP STA or WiFi uplink radio disables other wifi-ifaces on the selected

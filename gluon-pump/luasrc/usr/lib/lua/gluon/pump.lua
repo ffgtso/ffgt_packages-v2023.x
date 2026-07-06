@@ -67,6 +67,10 @@ function M.uplink_ifname()
 	return 'pumpwan'
 end
 
+function M.uplink_gluon_iface_section()
+	return 'iface_' .. M.uplink_ifname():gsub('[^%w_]', '_')
+end
+
 function M.radio_selected(selected, radio_name)
 	selected = non_empty(selected) or 'all'
 	return selected == 'all' or selected == radio_name

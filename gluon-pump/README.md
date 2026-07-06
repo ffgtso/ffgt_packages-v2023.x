@@ -32,8 +32,9 @@ und Mesh-VPN bleiben unverändert beim vorhandenen Gluon-Setup.
 Zusätzlich enthält das Paket einen Konfigurationsabschnitt **WiFi-Uplink**.
 Damit kann ein empfangenes WLAN als upstream WAN verwendet werden, wenn kein
 Ethernet-WAN vorhanden ist oder der Knoten bewusst per WLAN ins Internet
-gebracht werden soll. Dieser Modus ist kein Batman-Transport, sondern bindet
-ein STA-WLAN-Interface an Gluons `wan`-Netz.
+gebracht werden soll. Dieser Modus ist kein Batman-Transport, sondern bindet ein
+STA-WLAN-Interface als Gluon-Interface mit der Rolle `uplink` an das
+WAN an. Das virtuelle Netdev heißt `pumpwan`.
 
 ## Benennung und Konfiguration
 
@@ -137,10 +138,14 @@ option uplink_encryption 'psk2'   # oder none, psk, sae, psk3-mixed
 option uplink_key '...'
 ```
 
-Das Upgrade-Script erzeugt daraus ein dediziertes STA-Interface auf dem
-Gluon-WAN-Netz:
+Das Upgrade-Script erzeugt daraus ein dediziertes STA-Interface und
+registriert dessen Netdev zusätzlich in `/etc/config/gluon` als Uplink-Rolle:
 
 ```uci
+config interface 'iface_pumpwan'
+	option name 'pumpwan'
+	list role 'uplink'
+
 config wifi-iface 'pump_uplink'
 	option device 'radio1'
 	option network 'wan'
@@ -212,6 +217,7 @@ config settings 'settings'
 	option uplink_bssid_lock '1'
 	option uplink_encryption 'auto'
 	option uplink_key ''
+	option uplink_gluon_iface '0' # intern: Ownership für gluon.iface_pumpwan
 ```
 
 Beispiel AP-Seite:
@@ -297,14 +303,20 @@ uci set pump.settings.uplink_encryption='psk2'
 uci set pump.settings.uplink_key='upstream-passphrase'
 uci commit pump
 /lib/gluon/upgrade/335-gluon-pump
+uci commit pump
 uci commit gluon
 uci commit network
 uci commit wireless
+gluon-reconfigure
+/etc/init.d/network reload
 wifi reload
 ```
 
-Das Upgrade-Script bindet den WiFi-Uplink direkt an `network.wan`; der Knoten
-verwendet ihn dadurch wie einen normalen WAN-Zugang.
+Das Upgrade-Script bindet den WiFi-Uplink direkt an `network.wan` und legt
+zusätzlich `gluon.iface_pumpwan` mit Rolle `uplink` an. Ab Gluon 2022.1 wird
+`/etc/config/network` aus `/etc/config/gluon` neu erzeugt; deshalb ist
+`gluon-reconfigure` nach manuellen UCI-Änderungen notwendig. Der Config-Mode
+führt diese Reconfigure-/Reload-Schritte automatisch aus.
 
 ## Einbindung in eine Site
 
