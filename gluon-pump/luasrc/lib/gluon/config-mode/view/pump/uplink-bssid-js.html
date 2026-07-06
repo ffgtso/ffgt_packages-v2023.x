@@ -1,0 +1,44 @@
+<div style="display:none"<%= attr('id', id) %><%= attr('data-network-id', self.network_id) %><%= attr('data-bssid-id', self.bssid_id) %><%= attr('data-bssid-map', self.bssid_map) %>></div>
+<script>
+(function() {
+	var root = document.getElementById('<%| id %>');
+	if (!root) {
+		return;
+	}
+
+	function fieldByIdOrName(id) {
+		return document.getElementById(id) || document.getElementsByName(id)[0] || null;
+	}
+
+	var network = fieldByIdOrName(root.getAttribute('data-network-id'));
+	var bssid = fieldByIdOrName(root.getAttribute('data-bssid-id'));
+	if (!network || !bssid) {
+		return;
+	}
+
+	var bssidMap = {};
+	try {
+		bssidMap = JSON.parse(root.getAttribute('data-bssid-map') || '{}');
+	} catch (e) {
+		return;
+	}
+
+	function fillBssid(force) {
+		var selected = network.value || '';
+		var nextBssid = bssidMap[selected] || '';
+		if (!nextBssid) {
+			return;
+		}
+
+		if (force || !bssid.value) {
+			bssid.value = nextBssid;
+		}
+	}
+
+	network.addEventListener('change', function() {
+		fillBssid(true);
+	});
+
+	fillBssid(false);
+})();
+</script>

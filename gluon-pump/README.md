@@ -155,11 +155,14 @@ config wifi-iface 'pump_uplink'
 
 
 Die Auswahl des Upstream-Netzes setzt SSID, Radio, Verschlüsselung und eine
-vorbelegte BSSID. Die BSSID ist absichtlich ein separates Feld: Sie kann manuell
-geändert werden. Mit `uplink_bssid_lock` wird gesteuert, ob `wireless.pump_uplink.bssid`
-gesetzt wird. Bei `uplink_bssid_lock='0'` wird keine BSSID in der
-`wifi-iface`-Section gesetzt; der Supplicant darf dann jeden AP mit passender
-SSID und Verschlüsselung verwenden.
+vorbelegte BSSID. Die BSSID ist absichtlich ein separates Feld: Sie wird beim
+Wechsel des Dropdowns per Config-Mode-JavaScript ausgefüllt, kann danach aber
+manuell geändert werden. Zusätzlich füllt die Serverlogik die BSSID beim
+Speichern aus, falls das Feld leer eingereicht wird. Mit `uplink_bssid_lock`
+wird gesteuert, ob `wireless.pump_uplink.bssid` gesetzt wird. Bei
+`uplink_bssid_lock='0'` wird keine BSSID in der `wifi-iface`-Section gesetzt;
+der Supplicant darf dann jeden AP mit passender SSID und Verschlüsselung
+verwenden.
 
 Der WiFi-Uplink verwendet das gewählte Radio exklusiv. Während er aktiv ist,
 werden alle anderen `wifi-iface`-Sections auf diesem Radio deaktiviert, auch

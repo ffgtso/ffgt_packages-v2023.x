@@ -432,6 +432,15 @@ uplink_network.default = stored_uplink_value or ''
 local uplink_bssid = us:option(Value, 'uplink_bssid', translate('BSSID'))
 uplink_bssid:depends(uplink_enabled, true)
 uplink_bssid.default = stored_uplink_bssid or ''
+uplink_bssid.optional = true
+function uplink_bssid:cfgvalue()
+	if stored_uplink_bssid then
+		return stored_uplink_bssid
+	end
+
+	local selected = scan_entries[uplink_network.data or stored_uplink_value or '']
+	return selected and selected.bssid or ''
+end
 uplink_bssid.description = translate('Pre-filled with the BSSID of the selected upstream network. You may change it manually.')
 
 local uplink_bssid_lock = us:option(Flag, 'uplink_bssid_lock', translate('Use only this BSSID'))
@@ -442,8 +451,22 @@ uplink_bssid_lock.description = translate('When disabled, the uplink may associa
 local uplink_key = us:option(Value, 'uplink_key', translate('Uplink passphrase'))
 uplink_key:depends(uplink_enabled, true)
 uplink_key.default = uci:get('pump', 'settings', 'uplink_key') or ''
+uplink_key.optional = true
 uplink_key.password = true
 uplink_key.description = translate('Required for encrypted upstream networks; ignored for open networks.')
+
+local uplink_bssid_map = {}
+for value, entry in pairs(scan_entries) do
+	uplink_bssid_map[value] = entry.bssid
+end
+
+local uplink_bssid_js = us:element('pump/uplink-bssid-js', {
+	network_id = uplink_network:id(),
+	bssid_id = uplink_bssid:id(),
+	bssid_map = uplink_bssid_map,
+})
+uplink_bssid_js.package = 'gluon-pump'
+
 
 local uplink_info = us:option(Value, '_uplink_info', translate('Current uplink'))
 uplink_info.readonly = true
