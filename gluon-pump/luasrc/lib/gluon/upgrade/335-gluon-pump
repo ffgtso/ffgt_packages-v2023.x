@@ -14,6 +14,7 @@ local function ensure_settings()
 			mesh_no_rebroadcast = false,
 			preserve_channels = false,
 			uplink_enabled = false,
+			uplink_bssid_lock = true,
 			uplink_encryption = 'auto',
 		})
 	end
@@ -298,6 +299,7 @@ local function configure_wifi_uplink(radio, index, enabled)
 
 	local ssid = uci:get('pump', 'settings', 'uplink_ssid')
 	local bssid = pump.non_empty(uci:get('pump', 'settings', 'uplink_bssid'))
+	local bssid_lock = pump.uplink_bssid_locked()
 	local encryption = normalize_uplink_encryption(uci:get('pump', 'settings', 'uplink_encryption'))
 
 	uci:section('wireless', 'wifi-iface', name, {
@@ -311,9 +313,11 @@ local function configure_wifi_uplink(radio, index, enabled)
 		disabled = false,
 	})
 
-	if bssid then
+	if bssid_lock and pump.uplink_bssid_is_valid(bssid) then
 		uci:set('wireless', name, 'bssid', bssid)
 	else
+		-- Without a fixed BSSID, wpa_supplicant may associate with any AP that
+		-- advertises the configured SSID and compatible encryption.
 		uci:delete('wireless', name, 'bssid')
 	end
 

@@ -12,6 +12,8 @@ config settings 'settings'
 	option uplink_radio ''
 	option uplink_ssid ''
 	option uplink_bssid ''
+	# 1: use only uplink_bssid; 0: allow any AP with the selected SSID.
+	option uplink_bssid_lock '1'
 	option uplink_encryption 'auto'
 	option uplink_key ''
 

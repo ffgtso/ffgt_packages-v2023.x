@@ -385,10 +385,29 @@ uplink_network:depends(uplink_enabled, true)
 local stored_uplink_radio = pump.non_empty(uci:get('pump', 'settings', 'uplink_radio'))
 local stored_uplink_ssid = pump.non_empty(uci:get('pump', 'settings', 'uplink_ssid'))
 local stored_uplink_bssid = pump.non_empty(uci:get('pump', 'settings', 'uplink_bssid'))
+local stored_uplink_bssid_lock = pump.uplink_bssid_locked()
 local stored_uplink_encryption = pump.non_empty(uci:get('pump', 'settings', 'uplink_encryption')) or 'psk2'
-local stored_uplink_value = stored_uplink_radio and stored_uplink_bssid and (stored_uplink_radio .. '|' .. stored_uplink_bssid) or nil
 
-if stored_uplink_value and not scan_entries[stored_uplink_value] and stored_uplink_ssid then
+local function current_uplink_value()
+	if stored_uplink_radio and stored_uplink_bssid then
+		return stored_uplink_radio .. '|' .. stored_uplink_bssid
+	end
+
+	if stored_uplink_radio and stored_uplink_ssid then
+		for _, value in ipairs(scan_order) do
+			local entry = scan_entries[value]
+			if entry.radio == stored_uplink_radio and entry.ssid == stored_uplink_ssid then
+				return value
+			end
+		end
+	end
+
+	return nil
+end
+
+local stored_uplink_value = current_uplink_value()
+
+if stored_uplink_value and not scan_entries[stored_uplink_value] and stored_uplink_ssid and stored_uplink_bssid then
 	uplink_network:value(stored_uplink_value, string.format('%s: %s (%s, %s)', stored_uplink_radio, stored_uplink_ssid, stored_uplink_bssid, translate('configured; currently not seen')))
 	scan_entries[stored_uplink_value] = {
 		radio = stored_uplink_radio,
@@ -410,6 +429,16 @@ end
 
 uplink_network.default = stored_uplink_value or ''
 
+local uplink_bssid = us:option(Value, 'uplink_bssid', translate('BSSID'))
+uplink_bssid:depends(uplink_enabled, true)
+uplink_bssid.default = stored_uplink_bssid or ''
+uplink_bssid.description = translate('Pre-filled with the BSSID of the selected upstream network. You may change it manually.')
+
+local uplink_bssid_lock = us:option(Flag, 'uplink_bssid_lock', translate('Use only this BSSID'))
+uplink_bssid_lock:depends(uplink_enabled, true)
+uplink_bssid_lock.default = stored_uplink_bssid_lock
+uplink_bssid_lock.description = translate('When disabled, the uplink may associate with any AP that advertises the selected SSID.')
+
 local uplink_key = us:option(Value, 'uplink_key', translate('Uplink passphrase'))
 uplink_key:depends(uplink_enabled, true)
 uplink_key.default = uci:get('pump', 'settings', 'uplink_key') or ''
@@ -420,7 +449,8 @@ local uplink_info = us:option(Value, '_uplink_info', translate('Current uplink')
 uplink_info.readonly = true
 function uplink_info:cfgvalue()
 	if stored_uplink_radio and stored_uplink_ssid then
-		return string.format('%s / %s / %s', stored_uplink_radio, stored_uplink_ssid, stored_uplink_encryption)
+		local bssid = stored_uplink_bssid or translate('any BSSID')
+		return string.format('%s / %s / %s / %s', stored_uplink_radio, stored_uplink_ssid, bssid, stored_uplink_encryption)
 	end
 	return translate('not configured')
 end
@@ -441,16 +471,32 @@ function f:write()
 	uci:set('pump', 'settings', 'mode', new_mode)
 	uci:set('pump', 'settings', 'radio', new_radio)
 
-	local selected_uplink = scan_entries[uplink_network.data or '']
+	local selected_uplink_value = uplink_network.data or ''
+	local selected_uplink = scan_entries[selected_uplink_value]
 	local new_uplink_enabled = uplink_enabled.data and selected_uplink ~= nil and pump.non_empty(selected_uplink.ssid) ~= nil and pump.non_empty(selected_uplink.radio) ~= nil
 
 	uci:set('pump', 'settings', 'uplink_enabled', new_uplink_enabled and '1' or '0')
 	uci:set('pump', 'settings', 'uplink_key', uplink_key.data or '')
 
 	if new_uplink_enabled then
+		local submitted_bssid = pump.non_empty(uplink_bssid.data)
+		local network_changed = selected_uplink_value ~= (stored_uplink_value or '')
+
+		-- If the user selected a different scanned network and left the BSSID
+		-- field at its previous value, use the selected network's BSSID as the new
+		-- pre-filled value. If they typed a different value, keep their edit.
+		if network_changed and (submitted_bssid == nil or submitted_bssid == stored_uplink_bssid) then
+			submitted_bssid = selected_uplink.bssid
+		end
+
+		if submitted_bssid == nil then
+			submitted_bssid = selected_uplink.bssid
+		end
+
 		uci:set('pump', 'settings', 'uplink_radio', selected_uplink.radio)
 		uci:set('pump', 'settings', 'uplink_ssid', selected_uplink.ssid)
-		uci:set('pump', 'settings', 'uplink_bssid', selected_uplink.bssid)
+		uci:set('pump', 'settings', 'uplink_bssid', submitted_bssid or '')
+		uci:set('pump', 'settings', 'uplink_bssid_lock', uplink_bssid_lock.data and '1' or '0')
 		uci:set('pump', 'settings', 'uplink_encryption', selected_uplink.encryption)
 	else
 		uci:set('pump', 'settings', 'uplink_enabled', '0')

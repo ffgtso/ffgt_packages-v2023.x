@@ -101,3 +101,18 @@ msgstr "Kanal unbekannt"
 
 msgid "signal unknown"
 msgstr "Signal unbekannt"
+
+msgid "BSSID"
+msgstr "BSSID"
+
+msgid "Pre-filled with the BSSID of the selected upstream network. You may change it manually."
+msgstr "Wird mit der BSSID des ausgewählten Upstream-Netzes vorbelegt. Du kannst sie manuell ändern."
+
+msgid "Use only this BSSID"
+msgstr "Nur diese BSSID verwenden"
+
+msgid "When disabled, the uplink may associate with any AP that advertises the selected SSID."
+msgstr "Wenn deaktiviert, darf sich der Uplink mit einem beliebigen AP verbinden, der die ausgewählte SSID ausstrahlt."
+
+msgid "any BSSID"
+msgstr "beliebige BSSID"

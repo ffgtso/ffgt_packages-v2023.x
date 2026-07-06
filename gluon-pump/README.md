@@ -132,6 +132,7 @@ option uplink_enabled '1'
 option uplink_radio 'radio1'
 option uplink_ssid 'UpstreamSSID'
 option uplink_bssid 'aa:bb:cc:dd:ee:ff'
+option uplink_bssid_lock '1'      # 1: nur diese BSSID, 0: beliebiger AP mit dieser SSID
 option uplink_encryption 'psk2'   # oder none, psk, sae, psk3-mixed
 option uplink_key '...'
 ```
@@ -146,10 +147,19 @@ config wifi-iface 'pump_uplink'
 	option mode 'sta'
 	option ifname 'pumpwan'
 	option ssid 'UpstreamSSID'
+	# option bssid wird nur gesetzt, wenn uplink_bssid_lock=1 ist
 	option bssid 'aa:bb:cc:dd:ee:ff'
 	option encryption 'psk2'
 	option key '...'
 ```
+
+
+Die Auswahl des Upstream-Netzes setzt SSID, Radio, Verschlüsselung und eine
+vorbelegte BSSID. Die BSSID ist absichtlich ein separates Feld: Sie kann manuell
+geändert werden. Mit `uplink_bssid_lock` wird gesteuert, ob `wireless.pump_uplink.bssid`
+gesetzt wird. Bei `uplink_bssid_lock='0'` wird keine BSSID in der
+`wifi-iface`-Section gesetzt; der Supplicant darf dann jeden AP mit passender
+SSID und Verschlüsselung verwenden.
 
 Der WiFi-Uplink verwendet das gewählte Radio exklusiv. Während er aktiv ist,
 werden alle anderen `wifi-iface`-Sections auf diesem Radio deaktiviert, auch
@@ -196,6 +206,7 @@ config settings 'settings'
 	option uplink_radio ''
 	option uplink_ssid ''
 	option uplink_bssid ''
+	option uplink_bssid_lock '1'
 	option uplink_encryption 'auto'
 	option uplink_key ''
 ```
@@ -278,6 +289,7 @@ uci set pump.settings.uplink_enabled='1'
 uci set pump.settings.uplink_radio='radio1'
 uci set pump.settings.uplink_ssid='UpstreamSSID'
 uci set pump.settings.uplink_bssid='aa:bb:cc:dd:ee:ff'
+uci set pump.settings.uplink_bssid_lock='1'   # oder '0' für beliebige BSSID
 uci set pump.settings.uplink_encryption='psk2'
 uci set pump.settings.uplink_key='upstream-passphrase'
 uci commit pump

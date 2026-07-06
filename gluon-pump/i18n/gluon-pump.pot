@@ -93,3 +93,18 @@ msgstr ""
 
 msgid "signal unknown"
 msgstr ""
+
+msgid "BSSID"
+msgstr ""
+
+msgid "Pre-filled with the BSSID of the selected upstream network. You may change it manually."
+msgstr ""
+
+msgid "Use only this BSSID"
+msgstr ""
+
+msgid "When disabled, the uplink may associate with any AP that advertises the selected SSID."
+msgstr ""
+
+msgid "any BSSID"
+msgstr ""
