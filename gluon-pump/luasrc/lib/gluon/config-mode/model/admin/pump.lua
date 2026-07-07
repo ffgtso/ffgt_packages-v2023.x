@@ -3,6 +3,15 @@ local uci = require('simple-uci').cursor()
 local wireless = require 'gluon.wireless'
 local pump = require 'gluon.pump'
 
+
+local function commit_upgrade_state()
+	-- 335-gluon-pump runs in a separate process and writes its changes through
+	-- UCI. Commit those freshly materialized changes with the CLI instead of
+	-- committing this config-mode cursor again; the cursor may still contain
+	-- pre-upgrade values such as tunneldigger.*.bind_interface='br-wan'.
+	os.execute('uci -q commit pump >/dev/null 2>&1; uci -q commit gluon >/dev/null 2>&1; uci -q commit network >/dev/null 2>&1; uci -q commit wireless >/dev/null 2>&1; uci -q commit tunneldigger >/dev/null 2>&1')
+end
+
 local f = Form(translate('PUMP'))
 
 local s = f:section(Section, nil, translate(
@@ -572,19 +581,11 @@ function f:write()
 		-- rebuild network.wan as br-wan again, while a STA VIF must stay outside of
 		-- that bridge.
 		os.execute('/lib/gluon/upgrade/335-gluon-pump')
-		uci:commit('pump')
-		uci:commit('gluon')
-		uci:commit('network')
-		uci:commit('wireless')
-		pcall(function() uci:commit('tunneldigger') end)
+		commit_upgrade_state()
 	end
 
 	os.execute('/lib/gluon/upgrade/335-gluon-pump')
-	uci:commit('pump')
-	uci:commit('network')
-	uci:commit('gluon')
-	uci:commit('wireless')
-	pcall(function() uci:commit('tunneldigger') end)
+	commit_upgrade_state()
 
 	if uplink_changed or new_uplink_enabled then
 		-- Apply the newly created STA VIF for immediate testing; a normal reboot

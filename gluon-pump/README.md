@@ -456,6 +456,7 @@ administrativ zusammengehören und dieselbe Site-/Domain-Konfiguration nutzen.
 * 0.1.12 documents that `pump_wan6` may remain pending on IPv4-only uplinks; this is harmless when `pump_wan` is up.
 * 0.1.13 binds active Tunneldigger broker sections to `pumpwan` while WiFi-Uplink is active and restores their previous `bind_interface` values when WiFi-Uplink is disabled.
 * 0.1.14 adds WiFi-Uplink HT-mode selection and keeps STA power saving disabled by default, including a hotplug safeguard for `pumpwan`.
+* 0.1.15 fixes Config Mode persistence of `tunneldigger.<broker>.bind_interface`: after running the PUMP upgrade script, Config Mode commits the refreshed UCI state instead of overwriting it with the pre-upgrade Lua cursor.
 
 
 ### WiFi-Uplink network model
