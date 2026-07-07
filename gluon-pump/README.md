@@ -51,7 +51,7 @@ Site-/Domain-Konfiguration abgeleitet:
 
 * SSID: `PUMP-` + Wert aus `gluon.core.domain`; falls nicht gesetzt: `PUMP-nix`
 * Passphrase: Wert von `prefix6` aus der Site-Konfiguration
-* Encryption: `psk3-mixed` mit `ieee80211w=1`, also WPA2/WPA3-Mixed-Mode
+* Encryption: `sae-mixed` mit `ieee80211w=1`, also WPA2/WPA3-Mixed-Mode
 
 Im Config-Mode werden SSID und Passphrase als nicht editierbare Werte
 angezeigt. Editierbar sind:
@@ -134,7 +134,7 @@ option uplink_radio 'radio1'
 option uplink_ssid 'UpstreamSSID'
 option uplink_bssid 'aa:bb:cc:dd:ee:ff'
 option uplink_bssid_lock '1'      # 1: nur diese BSSID, 0: beliebiger AP mit dieser SSID
-option uplink_encryption 'psk2'   # oder none, psk, sae, psk3-mixed
+option uplink_encryption 'psk2'   # oder none, psk, sae, sae-mixed
 option uplink_key '...'
 ```
 
@@ -286,7 +286,7 @@ config wifi-iface 'pump_radio1'
 	option ifname 'pump1'
 	option ssid 'PUMP-...'
 	option key '...prefix6...'
-	option encryption 'psk3-mixed'
+	option encryption 'sae-mixed'
 	option ieee80211w '1'
 ```
 
@@ -376,3 +376,10 @@ gleichen Kanal Airtime teilen.
 PUMP ist bewusst keine automatische Nachbarschafts-Mesh-Funktion. Es ist als
 Werkzeug für geplante Funkstrecken gedacht, bei denen AP- und STA-Seite
 administrativ zusammengehören und dieselbe Site-/Domain-Konfiguration nutzen.
+
+
+## Notes for 0.1.10
+
+* WiFi uplink stores the selected AP BSSID server-side after saving; the live form no longer relies on JavaScript prefill.
+* WPA2/WPA3 mixed mode uses OpenWrt/Gluon UCI encryption `sae-mixed`; existing `psk3-mixed` settings are normalized on write.
+* The WiFi uplink STA no longer forces a generated `macaddr`; mac80211 chooses the STA address, which avoids VIF creation failures on targets that reject the generated address.

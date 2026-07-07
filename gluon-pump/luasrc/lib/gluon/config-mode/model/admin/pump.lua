@@ -305,7 +305,7 @@ local function encryption_to_uci(entry)
 	end
 
 	if auth:match('SAE') and auth:match('PSK') then
-		return 'psk3-mixed'
+		return 'sae-mixed'
 	elseif auth:match('SAE') then
 		return 'sae'
 	elseif tonumber(enc.wpa) and tonumber(enc.wpa) >= 2 then
@@ -386,7 +386,7 @@ local stored_uplink_radio = pump.non_empty(uci:get('pump', 'settings', 'uplink_r
 local stored_uplink_ssid = pump.non_empty(uci:get('pump', 'settings', 'uplink_ssid'))
 local stored_uplink_bssid = pump.non_empty(uci:get('pump', 'settings', 'uplink_bssid'))
 local stored_uplink_bssid_lock = pump.uplink_bssid_locked()
-local stored_uplink_encryption = pump.non_empty(uci:get('pump', 'settings', 'uplink_encryption')) or 'psk2'
+local stored_uplink_encryption = pump.normalize_encryption(uci:get('pump', 'settings', 'uplink_encryption'))
 
 local function current_uplink_value()
 	if stored_uplink_radio and stored_uplink_bssid then
@@ -455,19 +455,6 @@ uplink_key.optional = true
 uplink_key.password = true
 uplink_key.description = translate('Required for encrypted upstream networks; ignored for open networks.')
 
-local uplink_bssid_map = {}
-for value, entry in pairs(scan_entries) do
-	uplink_bssid_map[value] = entry.bssid
-end
-
-local uplink_bssid_js = us:element('pump/uplink-bssid-js', {
-	network_id = uplink_network:id(),
-	bssid_id = uplink_bssid:id(),
-	bssid_map = uplink_bssid_map,
-})
-uplink_bssid_js.package = 'gluon-pump'
-
-
 local uplink_info = us:option(Value, '_uplink_info', translate('Current uplink'))
 uplink_info.readonly = true
 function uplink_info:cfgvalue()
@@ -502,6 +489,7 @@ function f:write()
 	local selected_uplink_value = uplink_network.data or ''
 	local selected_uplink = scan_entries[selected_uplink_value]
 	local new_uplink_enabled = uplink_enabled.data and selected_uplink ~= nil and pump.non_empty(selected_uplink.ssid) ~= nil and pump.non_empty(selected_uplink.radio) ~= nil
+	local new_uplink_bssid = nil
 
 	uci:set('pump', 'settings', 'uplink_enabled', new_uplink_enabled and '1' or '0')
 	uci:set('pump', 'settings', 'uplink_key', uplink_key.data or '')
@@ -510,22 +498,22 @@ function f:write()
 		local submitted_bssid = pump.non_empty(uplink_bssid.data)
 		local network_changed = selected_uplink_value ~= (stored_uplink_value or '')
 
-		-- If the user selected a different scanned network and left the BSSID
-		-- field at its previous value, use the selected network's BSSID as the new
-		-- pre-filled value. If they typed a different value, keep their edit.
-		if network_changed and (submitted_bssid == nil or submitted_bssid == stored_uplink_bssid) then
-			submitted_bssid = selected_uplink.bssid
-		end
-
-		if submitted_bssid == nil then
-			submitted_bssid = selected_uplink.bssid
+		-- Keep the BSSID field as a server-side prefill value. When the user
+		-- changes the dropdown, the newly selected AP's BSSID wins on this save;
+		-- on later saves the editable BSSID field wins. This avoids the old/new
+		-- BSSID oscillation caused by comparing against the previously rendered
+		-- form value.
+		if network_changed then
+			new_uplink_bssid = selected_uplink.bssid
+		else
+			new_uplink_bssid = submitted_bssid or selected_uplink.bssid
 		end
 
 		uci:set('pump', 'settings', 'uplink_radio', selected_uplink.radio)
 		uci:set('pump', 'settings', 'uplink_ssid', selected_uplink.ssid)
-		uci:set('pump', 'settings', 'uplink_bssid', submitted_bssid or '')
+		uci:set('pump', 'settings', 'uplink_bssid', new_uplink_bssid or '')
 		uci:set('pump', 'settings', 'uplink_bssid_lock', uplink_bssid_lock.data and '1' or '0')
-		uci:set('pump', 'settings', 'uplink_encryption', selected_uplink.encryption)
+		uci:set('pump', 'settings', 'uplink_encryption', pump.normalize_encryption(selected_uplink.encryption))
 	else
 		uci:set('pump', 'settings', 'uplink_enabled', '0')
 	end
@@ -556,7 +544,7 @@ function f:write()
 	local uplink_changed = old_uplink_enabled ~= new_uplink_enabled
 		or old_uplink_radio ~= (new_uplink_enabled and selected_uplink.radio or nil)
 		or old_uplink_ssid ~= (new_uplink_enabled and selected_uplink.ssid or nil)
-		or old_uplink_bssid ~= (new_uplink_enabled and pump.non_empty(uplink_bssid.data) or nil)
+		or old_uplink_bssid ~= (new_uplink_enabled and new_uplink_bssid or nil)
 
 	if uplink_changed or new_uplink_enabled then
 		-- WiFi uplink is a Gluon uplink interface, not just a wireless VIF.

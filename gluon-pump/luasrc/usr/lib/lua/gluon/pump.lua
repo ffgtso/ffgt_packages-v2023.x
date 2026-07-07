@@ -76,8 +76,19 @@ function M.radio_selected(selected, radio_name)
 	return selected == 'all' or selected == radio_name
 end
 
-function M.encryption_uses_key(encryption)
+function M.normalize_encryption(encryption)
 	encryption = non_empty(encryption) or 'psk2'
+	if encryption == 'auto' then
+		return 'psk2'
+	end
+	if encryption == 'psk3-mixed' then
+		return 'sae-mixed'
+	end
+	return encryption
+end
+
+function M.encryption_uses_key(encryption)
+	encryption = M.normalize_encryption(encryption)
 	return encryption ~= 'none'
 end
 
@@ -100,7 +111,7 @@ end
 function M.uplink_config_is_valid()
 	local ssid = non_empty(uci:get('pump', 'settings', 'uplink_ssid'))
 	local radio = non_empty(uci:get('pump', 'settings', 'uplink_radio'))
-	local encryption = non_empty(uci:get('pump', 'settings', 'uplink_encryption')) or 'psk2'
+	local encryption = M.normalize_encryption(uci:get('pump', 'settings', 'uplink_encryption'))
 
 	if not ssid or not radio then
 		return false

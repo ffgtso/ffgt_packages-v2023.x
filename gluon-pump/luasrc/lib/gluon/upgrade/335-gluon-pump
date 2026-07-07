@@ -330,7 +330,7 @@ local function configure_pump_wireless(radio, index, enabled)
 		device = radio_name,
 		network = name,
 		mode = mode,
-		encryption = 'psk3-mixed',
+		encryption = 'sae-mixed',
 		ieee80211w = '1',
 		ssid = pump.ssid(),
 		key = pump.key(),
@@ -345,13 +345,16 @@ local function normalize_uplink_encryption(encryption)
 	if encryption == 'auto' then
 		return 'psk2'
 	end
+	if encryption == 'psk3-mixed' then
+		return 'sae-mixed'
+	end
 	return encryption
 end
 
 local function set_uplink_pmf(name, encryption)
 	if encryption == 'sae' then
 		uci:set('wireless', name, 'ieee80211w', '2')
-	elseif encryption == 'psk3-mixed' or encryption == 'sae-mixed' then
+	elseif encryption == 'sae-mixed' or encryption == 'psk3-mixed' then
 		uci:set('wireless', name, 'ieee80211w', '1')
 	else
 		uci:delete('wireless', name, 'ieee80211w')
@@ -375,16 +378,17 @@ local function configure_wifi_uplink(radio, index, enabled)
 	set_radio_exclusive(radio_name, name)
 	apply_uplink_radio_settings(radio)
 
-	local macaddr = wireless.get_wlan_mac(uci, radio, index, 4)
-	if not macaddr then
-		uci:set('wireless', name, 'disabled', true)
-		return
-	end
+	-- Do not force a synthetic MAC address for the WAN STA. Some DBDC
+	-- drivers/targets reject additional station VIFs when the requested MAC
+	-- address collides with another generated Gluon interface or is outside the
+	-- driver's accepted address mask. Let mac80211 pick the netdev address; the
+	-- WAN bridge keeps its own configured MAC address.
 
 	local ssid = uci:get('pump', 'settings', 'uplink_ssid')
 	local bssid = pump.non_empty(uci:get('pump', 'settings', 'uplink_bssid'))
 	local bssid_lock = pump.uplink_bssid_locked()
 	local encryption = normalize_uplink_encryption(uci:get('pump', 'settings', 'uplink_encryption'))
+	uci:set('pump', 'settings', 'uplink_encryption', encryption)
 
 	uci:section('wireless', 'wifi-iface', name, {
 		device = radio_name,
@@ -392,10 +396,11 @@ local function configure_wifi_uplink(radio, index, enabled)
 		mode = 'sta',
 		encryption = encryption,
 		ssid = ssid,
-		macaddr = macaddr,
 		ifname = pump.uplink_ifname(),
 		disabled = false,
 	})
+
+	uci:delete('wireless', name, 'macaddr')
 
 	if bssid_lock and pump.uplink_bssid_is_valid(bssid) then
 		uci:set('wireless', name, 'bssid', bssid)
