@@ -193,6 +193,13 @@ Unterstützt werden offene Netze sowie übliche WPA/WPA2/WPA3-Personal-Netze.
 Enterprise-/802.1X-Netze werden im Scan nicht als auswählbare Uplinks
 behandelt.
 
+`pump_wan6` wird immer mit angelegt, damit ein IPv6-fähiger Upstream per
+DHCPv6/Router Advertisements genutzt werden kann. Bei reinen IPv4-Uplinks kann
+`ifstatus pump_wan6` dauerhaft `pending` anzeigen und `odhcp6c` kann Meldungen
+wie `Failed to send RS` oder `Failed to send SOLICIT` ausgeben. Das ist
+unkritisch, solange `pump_wan` up ist und eine IPv4-Adresse sowie Default-Route
+erhalten hat.
+
 ## Rückkehr zur site.conf
 
 Wenn PUMP und WiFi-Uplink deaktiviert sind und das Paket selbst zuvor
@@ -384,12 +391,13 @@ Werkzeug für geplante Funkstrecken gedacht, bei denen AP- und STA-Seite
 administrativ zusammengehören und dieselbe Site-/Domain-Konfiguration nutzen.
 
 
-## Notes for 0.1.10 / 0.1.11
+## Notes for 0.1.10 / 0.1.11 / 0.1.12
 
 * WiFi uplink stores the selected AP BSSID server-side after saving; the live form no longer relies on JavaScript prefill.
 * WPA2/WPA3 mixed mode uses OpenWrt/Gluon UCI encryption `sae-mixed`; existing `psk3-mixed` settings are normalized on write.
 * The WiFi uplink STA no longer forces a generated `macaddr`; mac80211 chooses the STA address, which avoids VIF creation failures on targets that reject the generated address.
 * 0.1.11 moves the WiFi uplink off Gluon's `br-wan` bridge and onto dedicated `pump_wan`/`pump_wan6` DHCP interfaces, fixing `BRIDGE_NOT_ALLOWED` on STA interfaces.
+* 0.1.12 documents that `pump_wan6` may remain pending on IPv4-only uplinks; this is harmless when `pump_wan` is up.
 
 
 ### WiFi-Uplink network model
