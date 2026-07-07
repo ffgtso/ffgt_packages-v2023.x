@@ -16,6 +16,11 @@ config settings 'settings'
 	option uplink_bssid_lock '1'
 	option uplink_encryption 'auto'
 	option uplink_key ''
+	# WiFi uplink radio settings. uplink_htmode='auto' uses the best available
+	# mode reported by iwinfo; set VHT80/HE80/HT20/... for conservative links.
+	option uplink_htmode 'auto'
+	# 0 disables STA power saving for stability; 1 allows power saving.
+	option uplink_powersave '0'
 	# Internal ownership flag for the dedicated DHCP network interface used by
 	# the WiFi uplink. Older package versions used uplink_gluon_iface; it is
 	# cleaned up automatically.
@@ -24,3 +29,4 @@ config settings 'settings'
 	# Internal keys named iface_*_disabled are created while an exclusive
 	# PUMP STA or WiFi uplink radio disables other wifi-ifaces on the selected
 	# radio and are removed again on restore.
+	option tunneldigger_bind_interface '0' # intern: Ownership für Tunneldigger bind_interface

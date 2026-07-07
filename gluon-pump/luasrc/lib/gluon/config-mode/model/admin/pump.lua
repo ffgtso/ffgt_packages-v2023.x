@@ -455,6 +455,24 @@ uplink_key.optional = true
 uplink_key.password = true
 uplink_key.description = translate('Required for encrypted upstream networks; ignored for open networks.')
 
+local uplink_htmode = us:option(ListValue, 'uplink_htmode', translate('HT mode'))
+uplink_htmode:depends(uplink_enabled, true)
+uplink_htmode:value('auto', translate('(automatic / best available)'))
+for _, htmode in ipairs({
+	'HE160', 'HE80', 'HE40', 'HE20',
+	'VHT160', 'VHT80', 'VHT40', 'VHT20',
+	'HT40', 'HT20',
+}) do
+	uplink_htmode:value(htmode, htmode)
+end
+uplink_htmode.default = uci:get('pump', 'settings', 'uplink_htmode') or 'auto'
+uplink_htmode.description = translate('Use automatic mode for maximum throughput; select a fixed width such as VHT80, HE80 or HT20 if the upstream AP is unstable.')
+
+local uplink_powersave = us:option(Flag, 'uplink_powersave', translate('Enable WiFi power saving'))
+uplink_powersave:depends(uplink_enabled, true)
+uplink_powersave.default = uci:get_bool('pump', 'settings', 'uplink_powersave')
+uplink_powersave.description = translate('Disabled by default for uplink stability. Enable only when power consumption is more important than latency and link robustness.')
+
 local uplink_info = us:option(Value, '_uplink_info', translate('Current uplink'))
 uplink_info.readonly = true
 function uplink_info:cfgvalue()
@@ -493,6 +511,8 @@ function f:write()
 
 	uci:set('pump', 'settings', 'uplink_enabled', new_uplink_enabled and '1' or '0')
 	uci:set('pump', 'settings', 'uplink_key', uplink_key.data or '')
+	uci:set('pump', 'settings', 'uplink_htmode', uplink_htmode.data or 'auto')
+	uci:set('pump', 'settings', 'uplink_powersave', uplink_powersave.data and '1' or '0')
 
 	if new_uplink_enabled then
 		local submitted_bssid = pump.non_empty(uplink_bssid.data)
@@ -556,6 +576,7 @@ function f:write()
 		uci:commit('gluon')
 		uci:commit('network')
 		uci:commit('wireless')
+		pcall(function() uci:commit('tunneldigger') end)
 	end
 
 	os.execute('/lib/gluon/upgrade/335-gluon-pump')
@@ -563,12 +584,14 @@ function f:write()
 	uci:commit('network')
 	uci:commit('gluon')
 	uci:commit('wireless')
+	pcall(function() uci:commit('tunneldigger') end)
 
 	if uplink_changed or new_uplink_enabled then
 		-- Apply the newly created STA VIF for immediate testing; a normal reboot
 		-- after leaving Config Mode would do the same.
 		os.execute('/etc/init.d/network reload >/dev/null 2>&1')
 		os.execute('wifi reload >/dev/null 2>&1')
+		os.execute('[ -x /etc/init.d/tunneldigger ] && sleep 3 && /etc/init.d/tunneldigger restart >/dev/null 2>&1')
 	end
 end
 

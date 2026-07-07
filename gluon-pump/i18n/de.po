@@ -116,3 +116,12 @@ msgstr "Wenn deaktiviert, darf sich der Uplink mit einem beliebigen AP verbinden
 
 msgid "any BSSID"
 msgstr "beliebige BSSID"
+
+msgid "Use automatic mode for maximum throughput; select a fixed width such as VHT80, HE80 or HT20 if the upstream AP is unstable."
+msgstr "Automatischen Modus für maximalen Durchsatz verwenden; bei instabilem Upstream-AP eine feste Breite wie VHT80, HE80 oder HT20 auswählen."
+
+msgid "Enable WiFi power saving"
+msgstr "WLAN-Power-Saving aktivieren"
+
+msgid "Disabled by default for uplink stability. Enable only when power consumption is more important than latency and link robustness."
+msgstr "Für Uplink-Stabilität standardmäßig deaktiviert. Nur aktivieren, wenn Stromverbrauch wichtiger ist als Latenz und Link-Robustheit."

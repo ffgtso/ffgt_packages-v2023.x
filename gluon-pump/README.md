@@ -32,9 +32,9 @@ und Mesh-VPN bleiben unverändert beim vorhandenen Gluon-Setup.
 Zusätzlich enthält das Paket einen Konfigurationsabschnitt **WiFi-Uplink**.
 Damit kann ein empfangenes WLAN als upstream WAN verwendet werden, wenn kein
 Ethernet-WAN vorhanden ist oder der Knoten bewusst per WLAN ins Internet
-gebracht werden soll. Dieser Modus ist kein Batman-Transport, sondern bindet ein
-STA-WLAN-Interface als Gluon-Interface mit der Rolle `uplink` an das
-WAN an. Das virtuelle Netdev heißt `pumpwan`.
+gebracht werden soll. Dieser Modus ist kein Batman-Transport. Er erzeugt ein
+dediziertes geroutetes Layer-3-Uplink-Interface `pump_wan`/`pump_wan6`; das
+virtuelle WLAN-Netdev heißt `pumpwan`.
 
 ## Benennung und Konfiguration
 
@@ -62,6 +62,7 @@ angezeigt. Editierbar sind:
 * Kanal je ausgewähltem Radio, aber nur im AP-Modus
 * HT-Modus je ausgewähltem Radio, im AP- und STA-Modus
 * WiFi-Uplink: Auswahl eines empfangenen WLANs als WAN-Ersatz
+* WiFi-Uplink: HT-Modus und Power-Save-Verhalten
 
 Kanal und HT-Modus werden Gluon-/OpenWrt-konform am jeweiligen `wifi-device`
 gespeichert:
@@ -183,8 +184,10 @@ gesichert und beim Deaktivieren oder Radio-Wechsel wiederhergestellt.
 
 Für den WiFi-Uplink wird kein Kanal festgelegt. Das Radio wird auf
 `channel auto` gesetzt, damit der STA-Modus dem ausgewählten AP folgen kann.
-Der HT-Modus wird automatisch auf den besten vom Treiber gemeldeten Modus
-gesetzt. Sobald weder PUMP noch WiFi-Uplink aktiv sind und PUMP selbst
+Der HT-Modus kann im Config-Mode gesetzt werden. Bei `automatic / best available`
+wird der beste vom Treiber gemeldete Modus verwendet; bei instabilen Upstream-APs
+kann ein konservativer Modus wie `VHT80`, `HE80`, `HT40` oder `HT20` gewählt
+werden. Sobald weder PUMP noch WiFi-Uplink aktiv sind und PUMP selbst
 `gluon.wireless.preserve_channels` gesetzt hatte, entfernt das Paket diese
 Option und ruft wieder `/lib/gluon/upgrade/200-wireless` auf; damit greifen
 wieder die WLAN-Einstellungen aus der `site.conf`.
@@ -199,6 +202,56 @@ DHCPv6/Router Advertisements genutzt werden kann. Bei reinen IPv4-Uplinks kann
 wie `Failed to send RS` oder `Failed to send SOLICIT` ausgeben. Das ist
 unkritisch, solange `pump_wan` up ist und eine IPv4-Adresse sowie Default-Route
 erhalten hat.
+
+### Stabilität des WiFi-Uplinks
+
+Ein laufender WiFi-Uplink kann im Log gelegentlich Meldungen wie
+`CTRL-EVENT-BEACON-LOSS` erzeugen. Entscheidend ist zunächst, ob das Interface
+verbunden bleibt, DHCP funktioniert und die Default-Route erhalten bleibt.
+
+PUMP deaktiviert Power Saving für das STA-Netdev `pumpwan` standardmäßig:
+
+```uci
+option uplink_powersave '0'
+```
+
+Zusätzlich setzt ein Hotplug-Script beim `ifup` von `pump_wan` nochmals:
+
+```sh
+iw dev pumpwan set power_save off
+```
+
+Das reduziert Beacon-Loss-Probleme auf Treiber/AP-Kombinationen, bei denen
+Station-Power-Save den Uplink stört. Wer Power Saving ausdrücklich verwenden
+möchte, kann es im Config-Mode aktivieren oder per UCI setzen:
+
+```sh
+uci set pump.settings.uplink_powersave='1'
+```
+
+Bei weiterhin häufigem Beacon-Loss sollte zusätzlich die BSSID fixiert und der
+WiFi-Uplink-HT-Modus konservativer gesetzt werden, z. B. `VHT80` statt
+automatisch maximaler Breite.
+
+### Tunneldigger / Mesh-VPN über WiFi-Uplink
+
+Tunneldigger kann per `bind_interface` an ein konkretes Linux-Netdev gebunden
+werden. Viele Gluon-Sites setzen hier standardmäßig `br-wan`. Da PUMP den
+WiFi-Uplink bewusst nicht in `br-wan` bridged und `br-wan` bei reinem
+WiFi-Uplink fehlen kann, würde Tunneldigger sonst mit Meldungen wie
+`Failed to bind to device!` starten.
+
+Wenn der WiFi-Uplink aktiv ist, speichert PUMP deshalb den bisherigen Wert von
+`tunneldigger.<broker>.bind_interface` und setzt ihn für aktive Broker-Sections
+auf:
+
+```uci
+option bind_interface 'pumpwan'
+```
+
+Beim Deaktivieren des WiFi-Uplinks wird der vorherige Wert wiederhergestellt.
+Der Config-Mode startet Tunneldigger nach einer WiFi-Uplink-Änderung neu, damit
+der neue Bind sofort greift.
 
 ## Rückkehr zur site.conf
 
@@ -230,7 +283,10 @@ config settings 'settings'
 	option uplink_bssid_lock '1'
 	option uplink_encryption 'auto'
 	option uplink_key ''
+	option uplink_htmode 'auto'
+	option uplink_powersave '0'
 	option uplink_network_iface '0' # intern: Ownership für network.pump_wan/pump_wan6
+	option tunneldigger_bind_interface '0' # intern: Ownership für Tunneldigger bind_interface
 ```
 
 Beispiel AP-Seite:
@@ -398,6 +454,8 @@ administrativ zusammengehören und dieselbe Site-/Domain-Konfiguration nutzen.
 * The WiFi uplink STA no longer forces a generated `macaddr`; mac80211 chooses the STA address, which avoids VIF creation failures on targets that reject the generated address.
 * 0.1.11 moves the WiFi uplink off Gluon's `br-wan` bridge and onto dedicated `pump_wan`/`pump_wan6` DHCP interfaces, fixing `BRIDGE_NOT_ALLOWED` on STA interfaces.
 * 0.1.12 documents that `pump_wan6` may remain pending on IPv4-only uplinks; this is harmless when `pump_wan` is up.
+* 0.1.13 binds active Tunneldigger broker sections to `pumpwan` while WiFi-Uplink is active and restores their previous `bind_interface` values when WiFi-Uplink is disabled.
+* 0.1.14 adds WiFi-Uplink HT-mode selection and keeps STA power saving disabled by default, including a hotplug safeguard for `pumpwan`.
 
 
 ### WiFi-Uplink network model

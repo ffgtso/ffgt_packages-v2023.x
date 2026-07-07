@@ -16,6 +16,8 @@ local function ensure_settings()
 			uplink_enabled = false,
 			uplink_bssid_lock = true,
 			uplink_encryption = 'auto',
+			uplink_htmode = 'auto',
+			uplink_powersave = false,
 		})
 	end
 end
@@ -148,6 +150,71 @@ local function remove_wifi_uplink_network_if_owned()
 	remove_list_value('network', 'wan', 'ifname', pump.uplink_ifname())
 	uci:delete('pump', 'settings', 'uplink_gluon_iface')
 end
+
+local function saved_tunneldigger_bind_option(section_name)
+	return 'tunneldigger_' .. section_name:gsub('[^%w_]', '_') .. '_bind_interface'
+end
+
+local function foreach_tunneldigger_broker(callback)
+	pcall(function()
+		uci:foreach('tunneldigger', 'broker', function(section)
+			if section and section['.name'] then
+				callback(section)
+			end
+		end)
+	end)
+end
+
+local function set_tunneldigger_bind_interface(device)
+	local changed = false
+
+	foreach_tunneldigger_broker(function(section)
+		-- Only touch active broker sections. Disabled example/default sections are
+		-- intentionally left alone.
+		if section.enabled == '0' or section.enabled == false then
+			return
+		end
+
+		local section_name = section['.name']
+		local option = saved_tunneldigger_bind_option(section_name)
+		if uci:get('pump', 'settings', option) == nil then
+			local current = uci:get('tunneldigger', section_name, 'bind_interface')
+			uci:set('pump', 'settings', option, current == nil and 'absent' or tostring(current))
+		end
+
+		uci:set('tunneldigger', section_name, 'bind_interface', device)
+		changed = true
+	end)
+
+	if changed then
+		uci:set('pump', 'settings', 'tunneldigger_bind_interface', '1')
+	end
+end
+
+local function restore_tunneldigger_bind_interface_if_owned()
+	if not uci:get_bool('pump', 'settings', 'tunneldigger_bind_interface') then
+		return
+	end
+
+	foreach_tunneldigger_broker(function(section)
+		local section_name = section['.name']
+		local option = saved_tunneldigger_bind_option(section_name)
+		local saved = uci:get('pump', 'settings', option)
+		if saved == nil then
+			return
+		end
+
+		if saved == 'absent' then
+			uci:delete('tunneldigger', section_name, 'bind_interface')
+		else
+			uci:set('tunneldigger', section_name, 'bind_interface', saved)
+		end
+		uci:delete('pump', 'settings', option)
+	end)
+
+	uci:delete('pump', 'settings', 'tunneldigger_bind_interface')
+end
+
 
 local function selected_mode()
 	local mode = uci:get('pump', 'settings', 'mode')
@@ -305,10 +372,15 @@ end
 
 local function apply_uplink_radio_settings(radio)
 	local radio_name = radio['.name']
+	local htmode = pump.non_empty(uci:get('pump', 'settings', 'uplink_htmode')) or 'auto'
 
 	ensure_preserve_channels()
 	uci:set('wireless', radio_name, 'channel', 'auto')
-	uci:set('wireless', radio_name, 'htmode', best_htmode(radio) or uci:get('wireless', radio_name, 'htmode') or 'HT20')
+
+	if htmode == 'auto' then
+		htmode = best_htmode(radio) or uci:get('wireless', radio_name, 'htmode') or 'HT20'
+	end
+	uci:set('wireless', radio_name, 'htmode', htmode)
 end
 
 local function configure_network(name, enabled)
@@ -403,10 +475,12 @@ local function configure_wifi_uplink(radio, index, enabled)
 			uci:set('wireless', name, 'disabled', true)
 		end
 		remove_wifi_uplink_network_if_owned()
+		restore_tunneldigger_bind_interface_if_owned()
 		return
 	end
 
 	ensure_wifi_uplink_network()
+	set_tunneldigger_bind_interface(pump.uplink_ifname())
 	set_radio_exclusive(radio_name, name)
 	apply_uplink_radio_settings(radio)
 
@@ -429,6 +503,7 @@ local function configure_wifi_uplink(radio, index, enabled)
 		encryption = encryption,
 		ssid = ssid,
 		ifname = pump.uplink_ifname(),
+		powersave = uci:get_bool('pump', 'settings', 'uplink_powersave') and '1' or '0',
 		disabled = false,
 	})
 
@@ -487,3 +562,4 @@ uci:save('pump')
 uci:save('gluon')
 uci:save('network')
 uci:save('wireless')
+pcall(function() uci:save('tunneldigger') end)

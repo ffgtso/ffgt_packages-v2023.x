@@ -1,0 +1,18 @@
+#!/bin/sh
+
+[ "$ACTION" = "ifup" ] || exit 0
+[ "$INTERFACE" = "pump_wan" ] || exit 0
+
+# For point-to-point/longer-range WiFi uplinks, STA power saving may cause
+# repeated beacon-loss events on some drivers/AP combinations. Keep power save
+# disabled by default; users may opt in via pump.settings.uplink_powersave=1.
+[ "$(uci -q get pump.settings.uplink_powersave)" = "1" ] && exit 0
+
+ifname="$(uci -q get wireless.pump_uplink.ifname)"
+[ -n "$ifname" ] || ifname="pumpwan"
+
+/usr/sbin/iw dev "$ifname" set power_save off >/dev/null 2>&1 || \
+/sbin/iw dev "$ifname" set power_save off >/dev/null 2>&1 || \
+iw dev "$ifname" set power_save off >/dev/null 2>&1
+
+exit 0
