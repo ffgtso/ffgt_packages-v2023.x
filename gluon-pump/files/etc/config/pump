@@ -16,7 +16,10 @@ config settings 'settings'
 	option uplink_bssid_lock '1'
 	option uplink_encryption 'auto'
 	option uplink_key ''
-	option uplink_gluon_iface '0'
+	# Internal ownership flag for the dedicated DHCP network interface used by
+	# the WiFi uplink. Older package versions used uplink_gluon_iface; it is
+	# cleaned up automatically.
+	option uplink_network_iface '0'
 
 	# Internal keys named iface_*_disabled are created while an exclusive
 	# PUMP STA or WiFi uplink radio disables other wifi-ifaces on the selected

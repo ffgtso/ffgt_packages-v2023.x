@@ -85,33 +85,66 @@ local function remove_list_value(config, section, option, value)
 	end
 end
 
-local function ensure_gluon_uplink_iface()
-	local section = pump.uplink_gluon_iface_section()
+local function ensure_wifi_uplink_network()
+	local name = pump.uplink_network_name()
+	local name6 = pump.uplink_network6_name()
 
-	if not uci:get('gluon', section) then
-		uci:section('gluon', 'interface', section, {})
+	-- Do not register pumpwan as a Gluon uplink role and do not add it to
+	-- network.wan. Gluon builds wan as br-wan; a normal 802.11 station cannot
+	-- be enslaved into a bridge without 4addr/WDS, and mac80211 rejects that as
+	-- BRIDGE_NOT_ALLOWED. Instead use a dedicated L3 DHCP interface that gets
+	-- its device from the wifi-iface's network option.
+	remove_list_value('network', 'wan', 'ifname', pump.uplink_ifname())
+
+	local legacy_section = pump.uplink_gluon_iface_section()
+	if uci:get('gluon', legacy_section, 'name') == pump.uplink_ifname() then
+		uci:delete('gluon', legacy_section)
 	end
+	uci:delete('pump', 'settings', 'uplink_gluon_iface')
 
-	uci:set('gluon', section, 'name', pump.uplink_ifname())
-	uci:set_list('gluon', section, 'role', { 'uplink' })
-	uci:set('pump', 'settings', 'uplink_gluon_iface', '1')
+	if not uci:get('network', name) then
+		uci:section('network', 'interface', name, {})
+	end
+	uci:set('network', name, 'proto', 'dhcp')
+	uci:set('network', name, 'auto', '1')
+	uci:set('network', name, 'peerdns', '0')
+	uci:delete('network', name, 'type')
+	uci:delete('network', name, 'ifname')
 
-	-- Make the interface usable immediately after a plain wifi/network reload;
-	-- gluon-reconfigure will generate the same association from /etc/config/gluon.
-	ensure_network_wan()
-	add_list_unique('network', 'wan', 'ifname', pump.uplink_ifname())
+	if not uci:get('network', name6) then
+		uci:section('network', 'interface', name6, {})
+	end
+	uci:set('network', name6, 'proto', 'dhcpv6')
+	uci:set('network', name6, 'ifname', '@' .. name)
+	uci:set('network', name6, 'ip6table', '1')
+	uci:set('network', name6, 'sourcefilter', '0')
+	uci:set('network', name6, 'peerdns', '0')
+	uci:set('network', name6, 'reqprefix', 'no')
+
+	uci:set('pump', 'settings', 'uplink_network_iface', '1')
 end
 
-local function remove_gluon_uplink_iface_if_owned()
-	if not uci:get_bool('pump', 'settings', 'uplink_gluon_iface') then
-		return
+local function remove_wifi_uplink_network_if_owned()
+	local name = pump.uplink_network_name()
+	local name6 = pump.uplink_network6_name()
+
+	if uci:get_bool('pump', 'settings', 'uplink_network_iface') then
+		if uci:get('network', name, 'proto') == 'dhcp' then
+			uci:delete('network', name)
+		end
+		if uci:get('network', name6, 'ifname') == '@' .. name then
+			uci:delete('network', name6)
+		end
+		uci:delete('pump', 'settings', 'uplink_network_iface')
 	end
 
+	-- Clean up legacy fix8/fix9/fix10 state where pumpwan was added to the
+	-- Gluon WAN bridge. This cleanup is safe because only the explicit pumpwan
+	-- token and the legacy iface_pumpwan section are removed.
 	local section = pump.uplink_gluon_iface_section()
 	if uci:get('gluon', section, 'name') == pump.uplink_ifname() then
 		uci:delete('gluon', section)
 	end
-
 	remove_list_value('network', 'wan', 'ifname', pump.uplink_ifname())
 	uci:delete('pump', 'settings', 'uplink_gluon_iface')
 end
@@ -369,12 +402,11 @@ local function configure_wifi_uplink(radio, index, enabled)
 		if uci:get('wireless', name) then
 			uci:set('wireless', name, 'disabled', true)
 		end
-		remove_gluon_uplink_iface_if_owned()
+		remove_wifi_uplink_network_if_owned()
 		return
 	end
 
-	ensure_network_wan()
-	ensure_gluon_uplink_iface()
+	ensure_wifi_uplink_network()
 	set_radio_exclusive(radio_name, name)
 	apply_uplink_radio_settings(radio)
 
@@ -392,7 +424,7 @@ local function configure_wifi_uplink(radio, index, enabled)
 
 	uci:section('wireless', 'wifi-iface', name, {
 		device = radio_name,
-		network = 'wan',
+		network = pump.uplink_network_name(),
 		mode = 'sta',
 		encryption = encryption,
 		ssid = ssid,
@@ -431,7 +463,7 @@ local uplink_radio = pump.non_empty(uci:get('pump', 'settings', 'uplink_radio'))
 
 if not pump_enabled and not uplink_enabled then
 	restore_site_wireless_if_owned()
-	remove_gluon_uplink_iface_if_owned()
+	remove_wifi_uplink_network_if_owned()
 end
 
 local uplink_radio_config = nil

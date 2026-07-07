@@ -138,17 +138,24 @@ option uplink_encryption 'psk2'   # oder none, psk, sae, sae-mixed
 option uplink_key '...'
 ```
 
-Das Upgrade-Script erzeugt daraus ein dediziertes STA-Interface und
-registriert dessen Netdev zusätzlich in `/etc/config/gluon` als Uplink-Rolle:
+Das Upgrade-Script erzeugt daraus ein dediziertes Layer-3-STA-Interface.
+Es wird bewusst nicht in Gluons `br-wan` gebridged:
 
 ```uci
-config interface 'iface_pumpwan'
-	option name 'pumpwan'
-	list role 'uplink'
+config interface 'pump_wan'
+	option proto 'dhcp'
+	option auto '1'
+	option peerdns '0'
+
+config interface 'pump_wan6'
+	option proto 'dhcpv6'
+	option ifname '@pump_wan'
+	option reqprefix 'no'
+	option peerdns '0'
 
 config wifi-iface 'pump_uplink'
 	option device 'radio1'
-	option network 'wan'
+	option network 'pump_wan'
 	option mode 'sta'
 	option ifname 'pumpwan'
 	option ssid 'UpstreamSSID'
@@ -160,10 +167,9 @@ config wifi-iface 'pump_uplink'
 
 
 Die Auswahl des Upstream-Netzes setzt SSID, Radio, Verschlüsselung und eine
-vorbelegte BSSID. Die BSSID ist absichtlich ein separates Feld: Sie wird beim
-Wechsel des Dropdowns per Config-Mode-JavaScript ausgefüllt, kann danach aber
-manuell geändert werden. Zusätzlich füllt die Serverlogik die BSSID beim
-Speichern aus, falls das Feld leer eingereicht wird. Mit `uplink_bssid_lock`
+vorbelegte BSSID. Die BSSID ist absichtlich ein separates Feld: Die Serverlogik
+schreibt die BSSID des ausgewählten APs beim Speichern in dieses Feld; danach
+kann sie manuell geändert werden. Mit `uplink_bssid_lock`
 wird gesteuert, ob `wireless.pump_uplink.bssid` gesetzt wird. Bei
 `uplink_bssid_lock='0'` wird keine BSSID in der `wifi-iface`-Section gesetzt;
 der Supplicant darf dann jeden AP mit passender SSID und Verschlüsselung
@@ -217,7 +223,7 @@ config settings 'settings'
 	option uplink_bssid_lock '1'
 	option uplink_encryption 'auto'
 	option uplink_key ''
-	option uplink_gluon_iface '0' # intern: Ownership für gluon.iface_pumpwan
+	option uplink_network_iface '0' # intern: Ownership für network.pump_wan/pump_wan6
 ```
 
 Beispiel AP-Seite:
@@ -307,16 +313,16 @@ uci commit pump
 uci commit gluon
 uci commit network
 uci commit wireless
-gluon-reconfigure
 /etc/init.d/network reload
 wifi reload
 ```
 
-Das Upgrade-Script bindet den WiFi-Uplink direkt an `network.wan` und legt
-zusätzlich `gluon.iface_pumpwan` mit Rolle `uplink` an. Ab Gluon 2022.1 wird
-`/etc/config/network` aus `/etc/config/gluon` neu erzeugt; deshalb ist
-`gluon-reconfigure` nach manuellen UCI-Änderungen notwendig. Der Config-Mode
-führt diese Reconfigure-/Reload-Schritte automatisch aus.
+Das Upgrade-Script bindet den WiFi-Uplink nicht direkt an `network.wan`, weil
+`network.wan` in Gluon als Bridge (`br-wan`) erzeugt wird. Ein normales
+802.11-STA-Interface kann ohne WDS/4addr nicht in diese Bridge; netifd meldet
+sonst `BRIDGE_NOT_ALLOWED`. PUMP nutzt deshalb `network.pump_wan`/`pump_wan6`
+als dedizierte DHCP-Uplink-Interfaces. Der Config-Mode führt den notwendigen
+Upgrade- und Reload-Schritt automatisch aus.
 
 ## Einbindung in eine Site
 
@@ -378,8 +384,41 @@ Werkzeug für geplante Funkstrecken gedacht, bei denen AP- und STA-Seite
 administrativ zusammengehören und dieselbe Site-/Domain-Konfiguration nutzen.
 
 
-## Notes for 0.1.10
+## Notes for 0.1.10 / 0.1.11
 
 * WiFi uplink stores the selected AP BSSID server-side after saving; the live form no longer relies on JavaScript prefill.
 * WPA2/WPA3 mixed mode uses OpenWrt/Gluon UCI encryption `sae-mixed`; existing `psk3-mixed` settings are normalized on write.
 * The WiFi uplink STA no longer forces a generated `macaddr`; mac80211 chooses the STA address, which avoids VIF creation failures on targets that reject the generated address.
+* 0.1.11 moves the WiFi uplink off Gluon's `br-wan` bridge and onto dedicated `pump_wan`/`pump_wan6` DHCP interfaces, fixing `BRIDGE_NOT_ALLOWED` on STA interfaces.
+
+
+### WiFi-Uplink network model
+
+The WiFi uplink is configured as a normal station interface, but it is **not**
+added to Gluon's generated `wan` bridge. A non-WDS 802.11 station cannot be
+enslaved into a Linux bridge; OpenWrt/mac80211 rejects such a setup with
+`BRIDGE_NOT_ALLOWED`. Therefore PUMP creates a dedicated routed network
+interface instead:
+
+```uci
+config interface 'pump_wan'
+	option proto 'dhcp'
+	option auto '1'
+	option peerdns '0'
+
+config interface 'pump_wan6'
+	option proto 'dhcpv6'
+	option ifname '@pump_wan'
+	option reqprefix 'no'
+	option peerdns '0'
+
+config wifi-iface 'pump_uplink'
+	option network 'pump_wan'
+	option mode 'sta'
+	option ifname 'pumpwan'
+```
+
+This gives the node a real Layer-3 uplink/default route without trying to bridge
+the STA interface into `br-wan`. Legacy package state that added `pumpwan` to
+`network.wan.ifname` or created `gluon.iface_pumpwan` is removed on the next
+PUMP upgrade run.

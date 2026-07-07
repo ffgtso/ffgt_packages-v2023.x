@@ -547,17 +547,15 @@ function f:write()
 		or old_uplink_bssid ~= (new_uplink_enabled and new_uplink_bssid or nil)
 
 	if uplink_changed or new_uplink_enabled then
-		-- WiFi uplink is a Gluon uplink interface, not just a wireless VIF.
-		-- First materialize gluon.iface_pumpwan, then rebuild /etc/config/network
-		-- from /etc/config/gluon. The later direct upgrade call remains a fallback
-		-- for builds without gluon-reconfigure and reapplies wireless details after
-		-- Gluon regenerated the base configuration.
+		-- Materialize/refresh the dedicated routed WiFi-uplink interface before
+		-- reloading network and WiFi. Do not call gluon-reconfigure here: it would
+		-- rebuild network.wan as br-wan again, while a STA VIF must stay outside of
+		-- that bridge.
 		os.execute('/lib/gluon/upgrade/335-gluon-pump')
 		uci:commit('pump')
 		uci:commit('gluon')
 		uci:commit('network')
 		uci:commit('wireless')
-		os.execute('command -v gluon-reconfigure >/dev/null 2>&1 && gluon-reconfigure >/dev/null 2>&1')
 	end
 
 	os.execute('/lib/gluon/upgrade/335-gluon-pump')
