@@ -250,8 +250,12 @@ option bind_interface 'pumpwan'
 ```
 
 Beim Deaktivieren des WiFi-Uplinks wird der vorherige Wert wiederhergestellt.
-Der Config-Mode startet Tunneldigger nach einer WiFi-Uplink-Änderung neu, damit
-der neue Bind sofort greift.
+Der Config-Mode schreibt nur die UCI-Konfiguration. Er startet Tunneldigger nicht
+und wartet auch nicht auf `pumpwan`. Zur Laufzeit sorgt ein Hotplug-Script bei
+`ifup pump_wan` dafür, dass der Bind-Wert nochmals per UCI-CLI auf `pumpwan`
+materialisiert und Tunneldigger anschließend neu gestartet wird. Dadurch wird
+vermieden, dass Tunneldigger beim Boot gegen ein noch nicht existierendes oder
+falsches Device bindet.
 
 ## Rückkehr zur site.conf
 
@@ -384,8 +388,10 @@ Das Upgrade-Script bindet den WiFi-Uplink nicht direkt an `network.wan`, weil
 `network.wan` in Gluon als Bridge (`br-wan`) erzeugt wird. Ein normales
 802.11-STA-Interface kann ohne WDS/4addr nicht in diese Bridge; netifd meldet
 sonst `BRIDGE_NOT_ALLOWED`. PUMP nutzt deshalb `network.pump_wan`/`pump_wan6`
-als dedizierte DHCP-Uplink-Interfaces. Der Config-Mode führt den notwendigen
-Upgrade- und Reload-Schritt automatisch aus.
+als dedizierte DHCP-Uplink-Interfaces. Der Config-Mode schreibt nur die
+Konfiguration und materialisiert die daraus abgeleiteten UCI-Sections; WiFi-,
+Netzwerk- und Tunneldigger-Runtime werden erst im normalen Betriebsmodus bzw.
+über Hotplug/Init angewendet.
 
 ## Einbindung in eine Site
 
@@ -457,6 +463,8 @@ administrativ zusammengehören und dieselbe Site-/Domain-Konfiguration nutzen.
 * 0.1.13 binds active Tunneldigger broker sections to `pumpwan` while WiFi-Uplink is active and restores their previous `bind_interface` values when WiFi-Uplink is disabled.
 * 0.1.14 adds WiFi-Uplink HT-mode selection and keeps STA power saving disabled by default, including a hotplug safeguard for `pumpwan`.
 * 0.1.15 fixes Config Mode persistence of `tunneldigger.<broker>.bind_interface`: after running the PUMP upgrade script, Config Mode commits the refreshed UCI state instead of overwriting it with the pre-upgrade Lua cursor.
+* 0.1.17 removes all service restarts and runtime device waiting from Config Mode; Config Mode only writes UCI and materializes derived sections.
+* 0.1.18 makes Tunneldigger binding deterministic by using a dedicated UCI-CLI helper after the upgrade script has saved its simple-uci cursor. The helper is also used by the runtime hotplug path.
 
 
 ### WiFi-Uplink network model
@@ -489,3 +497,11 @@ This gives the node a real Layer-3 uplink/default route without trying to bridge
 the STA interface into `br-wan`. Legacy package state that added `pumpwan` to
 `network.wan.ifname` or created `gluon.iface_pumpwan` is removed on the next
 PUMP upgrade run.
+* 0.1.16 adds a runtime hotplug safeguard for Tunneldigger on WiFi-Uplink: when
+  `pump_wan` comes up, PUMP enforces `bind_interface='pumpwan'` for active
+  broker sections and restarts Tunneldigger after the `pumpwan` netdev exists.
+  This fixes boot/order races where Tunneldigger starts while `pumpwan` is not
+  present yet and logs `Failed to bind to device!`.
+* 0.1.17 keeps Config Mode side-effect free: it writes/materializes UCI only and
+  no longer reloads WiFi/network, waits for `pumpwan`, or starts/restarts
+  Tunneldigger from Config Mode.

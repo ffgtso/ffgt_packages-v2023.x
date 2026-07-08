@@ -125,3 +125,5 @@ msgstr "WLAN-Power-Saving aktivieren"
 
 msgid "Disabled by default for uplink stability. Enable only when power consumption is more important than latency and link robustness."
 msgstr "Für Uplink-Stabilität standardmäßig deaktiviert. Nur aktivieren, wenn Stromverbrauch wichtiger ist als Latenz und Link-Robustheit."
+
+# 0.1.16: keine neuen übersetzbaren Strings; ergänzt Tunneldigger-Hotplug-Schutz.

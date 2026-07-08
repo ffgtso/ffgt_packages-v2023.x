@@ -563,3 +563,12 @@ uci:save('gluon')
 uci:save('network')
 uci:save('wireless')
 pcall(function() uci:save('tunneldigger') end)
+
+-- Make the Tunneldigger bind target deterministic using the UCI CLI.  The
+-- helper is intentionally executed after this script has saved its simple-uci
+-- cursor, so a stale cursor cannot overwrite bind_interface back to br-wan.
+if uplink_enabled then
+	os.execute('/usr/lib/gluon/pump/tunneldigger-bind apply >/dev/null 2>&1')
+else
+	os.execute('/usr/lib/gluon/pump/tunneldigger-bind restore >/dev/null 2>&1')
+end

@@ -575,25 +575,12 @@ function f:write()
 		or old_uplink_ssid ~= (new_uplink_enabled and selected_uplink.ssid or nil)
 		or old_uplink_bssid ~= (new_uplink_enabled and new_uplink_bssid or nil)
 
-	if uplink_changed or new_uplink_enabled then
-		-- Materialize/refresh the dedicated routed WiFi-uplink interface before
-		-- reloading network and WiFi. Do not call gluon-reconfigure here: it would
-		-- rebuild network.wan as br-wan again, while a STA VIF must stay outside of
-		-- that bridge.
-		os.execute('/lib/gluon/upgrade/335-gluon-pump')
-		commit_upgrade_state()
-	end
-
+	-- Materialize derived UCI sections (wireless/network/tunneldigger) so the
+	-- saved configuration is complete. Do not reload WiFi/network and do not
+	-- start or restart Tunneldigger from Config Mode: pumpwan does not need to
+	-- exist here, and normal boot/hotplug processing applies the runtime state.
 	os.execute('/lib/gluon/upgrade/335-gluon-pump')
 	commit_upgrade_state()
-
-	if uplink_changed or new_uplink_enabled then
-		-- Apply the newly created STA VIF for immediate testing; a normal reboot
-		-- after leaving Config Mode would do the same.
-		os.execute('/etc/init.d/network reload >/dev/null 2>&1')
-		os.execute('wifi reload >/dev/null 2>&1')
-		os.execute('[ -x /etc/init.d/tunneldigger ] && sleep 3 && /etc/init.d/tunneldigger restart >/dev/null 2>&1')
-	end
 end
 
 return f

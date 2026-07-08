@@ -1,0 +1,105 @@
+#!/bin/sh
+
+# Keep Tunneldigger's bind_interface consistent with the PUMP WiFi uplink.
+# This script intentionally only writes UCI unless called with "restart".  It is
+# safe to call from Config Mode because it does not require pumpwan to exist.
+
+mode="${1:-apply}"
+ifname="$(uci -q get wireless.pump_uplink.ifname)"
+[ -n "$ifname" ] || ifname="pumpwan"
+
+section_key() {
+	echo "$1" | sed 's/[^A-Za-z0-9_]/_/g'
+}
+
+commit_if_changed() {
+	[ "$1" = "1" ] || return 0
+	uci -q commit pump
+	uci -q commit tunneldigger
+}
+
+restore_bind_interfaces() {
+	changed=0
+
+	for section in $(uci show tunneldigger 2>/dev/null | sed -n "s/^tunneldigger\.\([^=]*\)=broker$/\1/p"); do
+		key="tunneldigger_$(section_key "$section")_bind_interface"
+		saved="$(uci -q get "pump.settings.$key")"
+		[ -n "$saved" ] || continue
+
+		if [ "$saved" = "absent" ]; then
+			uci -q delete "tunneldigger.$section.bind_interface"
+		else
+			uci set "tunneldigger.$section.bind_interface=$saved"
+		fi
+		uci -q delete "pump.settings.$key"
+		changed=1
+	done
+
+	uci -q delete pump.settings.tunneldigger_bind_interface
+
+	# Remove stale saved values for sections that no longer exist.
+	for opt in $(uci show pump 2>/dev/null | sed -n "s/^pump\.settings\.\(tunneldigger_.*_bind_interface\)=.*$/\1/p"); do
+		uci -q delete "pump.settings.$opt"
+		changed=1
+	done
+
+	commit_if_changed "$changed"
+}
+
+apply_bind_interfaces() {
+	changed=0
+	found=0
+
+	for section in $(uci show tunneldigger 2>/dev/null | sed -n "s/^tunneldigger\.\([^=]*\)=broker$/\1/p"); do
+		enabled="$(uci -q get "tunneldigger.$section.enabled")"
+		[ "$enabled" = "0" ] && continue
+
+		found=1
+		key="tunneldigger_$(section_key "$section")_bind_interface"
+
+		if ! uci -q get "pump.settings.$key" >/dev/null; then
+			current="$(uci -q get "tunneldigger.$section.bind_interface")"
+			[ -n "$current" ] || current="absent"
+			uci set "pump.settings.$key=$current"
+			changed=1
+		fi
+
+		current="$(uci -q get "tunneldigger.$section.bind_interface")"
+		if [ "$current" != "$ifname" ]; then
+			uci set "tunneldigger.$section.bind_interface=$ifname"
+			changed=1
+		fi
+	done
+
+	[ "$found" = "1" ] || return 0
+
+	if [ "$(uci -q get pump.settings.tunneldigger_bind_interface)" != "1" ]; then
+		uci set pump.settings.tunneldigger_bind_interface='1'
+		changed=1
+	fi
+
+	commit_if_changed "$changed"
+}
+
+case "$mode" in
+	restore)
+		restore_bind_interfaces
+		;;
+	apply|restart)
+		[ "$(uci -q get pump.settings.uplink_enabled)" = "1" ] || {
+			restore_bind_interfaces
+			exit 0
+		}
+		apply_bind_interfaces
+		if [ "$mode" = "restart" ]; then
+			[ -d "/sys/class/net/$ifname" ] || exit 0
+			[ -x /etc/init.d/tunneldigger ] && /etc/init.d/tunneldigger restart >/dev/null 2>&1
+		fi
+		;;
+	*)
+		echo "Usage: $0 [apply|restore|restart]" >&2
+		exit 2
+		;;
+esac
+
+exit 0
