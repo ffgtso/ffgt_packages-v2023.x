@@ -18,6 +18,7 @@ local function ensure_settings()
 			uplink_encryption = 'auto',
 			uplink_htmode = 'auto',
 			uplink_powersave = false,
+			firewall_wan_zone = false,
 		})
 	end
 end
@@ -87,6 +88,9 @@ local function remove_list_value(config, section, option, value)
 	end
 end
 
+local ensure_firewall_wan_zone
+local restore_firewall_wan_zone_if_owned
+
 local function ensure_wifi_uplink_network()
 	local name = pump.uplink_network_name()
 	local name6 = pump.uplink_network6_name()
@@ -109,7 +113,7 @@ local function ensure_wifi_uplink_network()
 	end
 	uci:set('network', name, 'proto', 'dhcp')
 	uci:set('network', name, 'auto', '1')
-	uci:set('network', name, 'peerdns', '0')
+	uci:set('network', name, 'peerdns', '1')
 	uci:delete('network', name, 'type')
 	uci:delete('network', name, 'ifname')
 
@@ -120,10 +124,84 @@ local function ensure_wifi_uplink_network()
 	uci:set('network', name6, 'ifname', '@' .. name)
 	uci:set('network', name6, 'ip6table', '1')
 	uci:set('network', name6, 'sourcefilter', '0')
-	uci:set('network', name6, 'peerdns', '0')
+	uci:set('network', name6, 'peerdns', '1')
 	uci:set('network', name6, 'reqprefix', 'no')
 
 	uci:set('pump', 'settings', 'uplink_network_iface', '1')
+	ensure_firewall_wan_zone()
+end
+
+
+local function saved_firewall_zone_option(section_name)
+	return 'firewall_' .. section_name:gsub('[^%w_]', '_') .. '_networks'
+end
+
+function ensure_firewall_wan_zone()
+	local changed = false
+	local found = false
+
+	pcall(function()
+		uci:foreach('firewall', 'zone', function(zone)
+			local section_name = zone['.name']
+			if zone.name ~= 'wan' or not section_name then
+				return
+			end
+
+			found = true
+			local saved_option = saved_firewall_zone_option(section_name)
+			if uci:get('pump', 'settings', saved_option) == nil then
+				local current = uci:get('firewall', section_name, 'network')
+				if type(current) == 'table' then
+					uci:set_list('pump', 'settings', saved_option, current)
+				elseif current == nil then
+					uci:set('pump', 'settings', saved_option, 'absent')
+				else
+					uci:set('pump', 'settings', saved_option, tostring(current))
+				end
+			end
+
+			add_list_unique('firewall', section_name, 'network', pump.uplink_network_name())
+			add_list_unique('firewall', section_name, 'network', pump.uplink_network6_name())
+			changed = true
+		end)
+	end)
+
+	if found and changed then
+		uci:set('pump', 'settings', 'firewall_wan_zone', '1')
+	end
+end
+
+function restore_firewall_wan_zone_if_owned()
+	if not uci:get_bool('pump', 'settings', 'firewall_wan_zone') then
+		return
+	end
+
+	pcall(function()
+		uci:foreach('firewall', 'zone', function(zone)
+			local section_name = zone['.name']
+			if not section_name then
+				return
+			end
+
+			local saved_option = saved_firewall_zone_option(section_name)
+			local saved = uci:get('pump', 'settings', saved_option)
+			if saved ~= nil then
+				if saved == 'absent' then
+					uci:delete('firewall', section_name, 'network')
+				elseif type(saved) == 'table' then
+					uci:set_list('firewall', section_name, 'network', saved)
+				else
+					uci:set('firewall', section_name, 'network', saved)
+				end
+				uci:delete('pump', 'settings', saved_option)
+			else
+				remove_list_value('firewall', section_name, 'network', pump.uplink_network_name())
+				remove_list_value('firewall', section_name, 'network', pump.uplink_network6_name())
+			end
+		end)
+	end)
+
+	uci:delete('pump', 'settings', 'firewall_wan_zone')
 end
 
 local function remove_wifi_uplink_network_if_owned()
@@ -149,6 +227,7 @@ local function remove_wifi_uplink_network_if_owned()
 	end
 	remove_list_value('network', 'wan', 'ifname', pump.uplink_ifname())
 	uci:delete('pump', 'settings', 'uplink_gluon_iface')
+	restore_firewall_wan_zone_if_owned()
 end
 
 local function saved_tunneldigger_bind_option(section_name)
@@ -562,6 +641,7 @@ uci:save('pump')
 uci:save('gluon')
 uci:save('network')
 uci:save('wireless')
+pcall(function() uci:save('firewall') end)
 pcall(function() uci:save('tunneldigger') end)
 
 -- Make the Tunneldigger bind target deterministic using the UCI CLI.  The

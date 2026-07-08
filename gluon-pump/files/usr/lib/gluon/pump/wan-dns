@@ -1,0 +1,70 @@
+#!/bin/sh
+
+# Publish DNS servers learned on the PUMP WiFi uplink to Gluon's WAN DNS
+# dnsmasq instance.  The node uses peerdns=1 on pump_wan, but gluon-wan and
+# mesh-vpn broker resolution consume /var/gluon/wan-dnsmasq/resolv.conf on
+# many Gluon setups, so keep that file in sync as soon as pump_wan is up.
+
+resolv=/var/gluon/wan-dnsmasq/resolv.conf
+interface="${1:-pump_wan}"
+
+collect_dns() {
+	ifstatus "$interface" 2>/dev/null | jsonfilter -e '@["dns-server"][*]' 2>/dev/null
+}
+
+collect_inactive_dns() {
+	ifstatus "$interface" 2>/dev/null | jsonfilter -e '@.inactive["dns-server"][*]' 2>/dev/null
+}
+
+collect_dhcp_server() {
+	ifstatus "$interface" 2>/dev/null | jsonfilter -e '@.data.dhcpserver' 2>/dev/null
+}
+
+write_dns() {
+	dns="$(collect_dns)"
+	[ -n "$dns" ] || dns="$(collect_inactive_dns)"
+	[ -n "$dns" ] || dns="$(collect_dhcp_server)"
+
+	mkdir -p "$(dirname "$resolv")"
+	: > "$resolv.tmp"
+
+	for server in $dns; do
+		case "$server" in
+			*:*|*.*)
+				echo "nameserver $server" >> "$resolv.tmp"
+				;;
+		esac
+	done
+
+	mv "$resolv.tmp" "$resolv"
+
+	if [ -s "$resolv" ]; then
+		if [ -x /etc/init.d/gluon-wan-dnsmasq ]; then
+			/etc/init.d/gluon-wan-dnsmasq restart >/dev/null 2>&1 || true
+		fi
+		return 0
+	fi
+
+	return 1
+}
+
+clear_dns_if_owned() {
+	[ -e "$resolv" ] || return 0
+	: > "$resolv"
+	if [ -x /etc/init.d/gluon-wan-dnsmasq ]; then
+		/etc/init.d/gluon-wan-dnsmasq restart >/dev/null 2>&1 || true
+	fi
+}
+
+case "${2:-update}" in
+	update|ifup|ifupdate)
+		write_dns
+		;;
+	clear|ifdown)
+		clear_dns_if_owned
+		;;
+	*)
+		echo "Usage: $0 [interface] [update|clear]" >&2
+		exit 2
+		;;
+esac

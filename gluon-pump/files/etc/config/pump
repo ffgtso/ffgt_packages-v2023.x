@@ -30,3 +30,4 @@ config settings 'settings'
 	# PUMP STA or WiFi uplink radio disables other wifi-ifaces on the selected
 	# radio and are removed again on restore.
 	option tunneldigger_bind_interface '0' # intern: Ownership für Tunneldigger bind_interface
+	option firewall_wan_zone '0' # intern: Ownership für firewall zone network additions

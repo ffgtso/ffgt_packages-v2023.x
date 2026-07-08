@@ -146,13 +146,13 @@ Es wird bewusst nicht in Gluons `br-wan` gebridged:
 config interface 'pump_wan'
 	option proto 'dhcp'
 	option auto '1'
-	option peerdns '0'
+	option peerdns '1'
 
 config interface 'pump_wan6'
 	option proto 'dhcpv6'
 	option ifname '@pump_wan'
 	option reqprefix 'no'
-	option peerdns '0'
+	option peerdns '1'
 
 config wifi-iface 'pump_uplink'
 	option device 'radio1'
@@ -428,6 +428,7 @@ GLUON_SITE_PACKAGES += gluon-pump
 * Erfordert WPA3-AP-Support über `gluon-wireless-encryption-wpa3`.
 * Erfordert für PUMP-STA und WiFi-Uplink zusätzlich `wpa-supplicant-wolfssl`, da `hostapd-wolfssl` nur den Authenticator/AP-Teil bereitstellt.
 * Erfordert `libiwinfo-lua` für Kanal- und HT-Modus-Listen im Config-Mode.
+* Erfordert `jsonfilter` für die Runtime-Synchronisierung der per DHCP gelernten DNS-Server in Gluons WAN-DNS-Pfad.
 * `gluon.core.domain` darf inklusive Präfix `PUMP-` maximal 32 Zeichen ergeben.
   Ist die SSID länger, wird PUMP nicht aktiviert und im Config-Mode wird eine
   Warnung angezeigt.
@@ -479,13 +480,13 @@ interface instead:
 config interface 'pump_wan'
 	option proto 'dhcp'
 	option auto '1'
-	option peerdns '0'
+	option peerdns '1'
 
 config interface 'pump_wan6'
 	option proto 'dhcpv6'
 	option ifname '@pump_wan'
 	option reqprefix 'no'
-	option peerdns '0'
+	option peerdns '1'
 
 config wifi-iface 'pump_uplink'
 	option network 'pump_wan'
@@ -505,3 +506,10 @@ PUMP upgrade run.
 * 0.1.17 keeps Config Mode side-effect free: it writes/materializes UCI only and
   no longer reloads WiFi/network, waits for `pumpwan`, or starts/restarts
   Tunneldigger from Config Mode.
+
+
+### Notes for 0.1.19
+
+* `pump_wan` and `pump_wan6` are added to the existing firewall zone named `wan` while WiFi-Uplink is active. This makes the WiFi uplink follow the same WAN-side access rules as the normal `br-wan` uplink, for example SSH access to the node where the site firewall permits it. The previous firewall zone network list is saved in `/etc/config/pump` and restored when WiFi-Uplink is disabled.
+* `pump_wan`/`pump_wan6` now use `peerdns=1`. On `ifup`/`ifupdate` of `pump_wan`, PUMP writes the learned DNS servers to `/var/gluon/wan-dnsmasq/resolv.conf` and restarts `gluon-wan-dnsmasq` if that init script exists. This allows `gluon-wan <command>` and Tunneldigger broker hostname resolution to use DNS learned from the WiFi uplink.
+* Config Mode still does not restart services. DNS and Tunneldigger runtime updates happen via hotplug after `pump_wan` is actually up.

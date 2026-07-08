@@ -9,7 +9,7 @@ local function commit_upgrade_state()
 	-- UCI. Commit those freshly materialized changes with the CLI instead of
 	-- committing this config-mode cursor again; the cursor may still contain
 	-- pre-upgrade values such as tunneldigger.*.bind_interface='br-wan'.
-	os.execute('uci -q commit pump >/dev/null 2>&1; uci -q commit gluon >/dev/null 2>&1; uci -q commit network >/dev/null 2>&1; uci -q commit wireless >/dev/null 2>&1; uci -q commit tunneldigger >/dev/null 2>&1')
+	os.execute('uci -q commit pump >/dev/null 2>&1; uci -q commit gluon >/dev/null 2>&1; uci -q commit network >/dev/null 2>&1; uci -q commit wireless >/dev/null 2>&1; uci -q commit firewall >/dev/null 2>&1; uci -q commit tunneldigger >/dev/null 2>&1')
 end
 
 local f = Form(translate('PUMP'))

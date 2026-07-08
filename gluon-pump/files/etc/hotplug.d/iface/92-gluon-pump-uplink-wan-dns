@@ -1,0 +1,15 @@
+#!/bin/sh
+
+[ "$INTERFACE" = "pump_wan" ] || exit 0
+[ "$(uci -q get pump.settings.uplink_enabled)" = "1" ] || exit 0
+
+case "$ACTION" in
+	ifup|ifupdate)
+		/usr/lib/gluon/pump/wan-dns pump_wan update >/dev/null 2>&1 &
+		;;
+	ifdown)
+		/usr/lib/gluon/pump/wan-dns pump_wan clear >/dev/null 2>&1 &
+		;;
+esac
+
+exit 0
