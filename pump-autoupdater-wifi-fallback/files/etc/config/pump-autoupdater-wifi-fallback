@@ -1,0 +1,5 @@
+#config pump-autoupdater-wifi-fallback settings
+#       option enabled 1
+#       option outage_delay 7200
+#       option min_uptime 3600
+#       option ssid_pattern '.*[Ff][Rr][Ee][Ii][Ff][Uu][Nn][Kk].*'
