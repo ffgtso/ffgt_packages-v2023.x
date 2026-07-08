@@ -1,67 +1,45 @@
 #!/usr/bin/lua
--- SPDX-License-Identifier: BSD-2-Clause
 
 local uci = require('simple-uci').cursor()
 
-local configname = 'pump-autoupdater-wifi-fallback'
-
 local enabled
-local outage_delay
-local min_uptime
-local ssid_pattern
-
-if uci:get(configname, 'settings') then
-	enabled = uci:get_bool(configname, 'settings', 'enabled')
-	outage_delay = uci:get(configname, 'settings', 'outage_delay')
-	min_uptime = uci:get(configname, 'settings', 'min_uptime')
-	ssid_pattern = uci:get(configname, 'settings', 'ssid_pattern')
-	uci:delete(configname, 'settings')
+if uci:get('pump-autoupdater-wifi-fallback', 'settings') then
+  enabled = uci:get_bool('pump-autoupdater-wifi-fallback', 'settings', 'enabled')
+  uci:delete('pump-autoupdater-wifi-fallback', 'settings')
 else
-	-- Match the original behaviour: if the autoupdater is enabled, enable the
-	-- recovery fallback by default.
-	enabled = uci:get_bool('autoupdater', 'settings', 'enabled')
+  enabled = uci:get_bool('autoupdater', 'settings', 'enabled')
 end
 
-uci:section(configname, configname, 'settings', {
-	enabled = enabled,
-	outage_delay = outage_delay or '7200',
-	min_uptime = min_uptime or '3600',
-	ssid_pattern = ssid_pattern or '.*[Ff][Rr][Ee][Ii][Ff][Uu][Nn][Kk].*',
+uci:section('pump-autoupdater-wifi-fallback', 'pump-autoupdater-wifi-fallback', 'settings',{
+  enabled = enabled,
 })
 
 uci:delete('wireless', 'fallback')
 uci:delete('network', 'fallback')
 uci:delete('network', 'fallback6')
 
-uci:section('network', 'interface', 'fallback', {
-	proto = 'dhcp',
-	peerdns = true,
-	sourcefilter = false,
+uci:section('network', 'interface', 'fallback',{
+  proto = 'dhcp',
+  peerdns = true,
+  sourcefilter = false,
 })
-uci:section('network', 'interface', 'fallback6', {
-	ifname = '@fallback',
-	proto = 'dhcpv6',
-	peerdns = true,
-	sourcefilter = false,
+uci:section('network', 'interface', 'fallback6',{
+  ifname = '@fallback',
+  proto = 'dhcpv6',
+  peerdns = true,
+  sourcefilter = false,
 })
 
-uci:save(configname)
+uci:save('pump-autoupdater-wifi-fallback')
 uci:save('network')
 uci:save('wireless')
 
-local minute = 10
 local file = io.open('/usr/lib/micron.d/autoupdater', 'r')
-if file then
-	local content = file:read('*a') or ''
-	local parsed = tonumber(content:match('^([0-9][0-9]?)%s'))
-	file:close()
-	if parsed then
-		minute = (parsed + 10) % 60
-	end
-end
+local content = file:read "*a"
+local minute = tonumber(content:match('^([0-9][0-9]?)%s'))
+file:close()
+minute = (minute + 10) % 60
 
 local f = io.open('/usr/lib/micron.d/pump-autoupdater-wifi-fallback', 'w')
-if f then
-	f:write(string.format('%i * * * * /usr/sbin/pump-autoupdater-wifi-fallback\n', minute))
-	f:close()
-end
+f:write(string.format('%i * * * * /usr/sbin/pump-autoupdater-wifi-fallback\n', minute))
+f:close()

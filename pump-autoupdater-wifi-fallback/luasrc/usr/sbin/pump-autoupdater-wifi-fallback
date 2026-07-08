@@ -1,6 +1,4 @@
 #!/usr/bin/lua
--- SPDX-License-Identifier: BSD-2-Clause
-
 local uci = require('simple-uci').cursor()
 local autil = require 'pump-autoupdater-wifi-fallback.util'
 local util = require 'gluon.util'
@@ -10,247 +8,182 @@ local unistd = require 'posix.unistd'
 
 local configname = 'pump-autoupdater-wifi-fallback'
 local lockfilename = '/var/lock/' .. configname .. '.lock'
-local backupdir = '/tmp/' .. configname
 local force = false
+local min_uptime_secs = 3600
 local branch_name = uci:get('autoupdater', 'settings', 'branch')
 
-local function config_number(option, default)
-	local value = tonumber(uci:get(configname, 'settings', option))
-	if value == nil then
-		return default
-	end
-	return value
+local lockfd, err = fcntl.open(lockfilename, bit.bor(fcntl.O_WRONLY, fcntl.O_CREAT), 384) -- mode 0600
+if not lockfd then
+  autil.log('err', err)
+  local err_verbose = string.format("Unable to get file descriptor for lock file %s .", lockfilename)
+  autil.log('err', err_verbose)
+  os.exit(1)
 end
 
-local function run(command)
-	return os.execute(command)
-end
-
-local function lock_or_exit()
-	local lockfd, err = fcntl.open(lockfilename, bit.bor(fcntl.O_WRONLY, fcntl.O_CREAT), 384) -- 0600
-	if not lockfd then
-		autil.log('err', err or ('unable to open lock file ' .. lockfilename))
-		os.exit(1)
-	end
-
-	local ok = fcntl.fcntl(lockfd, fcntl.F_SETLK, {
-		l_start = 0,
-		l_len = 0,
-		l_type = fcntl.F_WRLCK,
-		l_whence = unistd.SEEK_SET,
-	})
-	if not ok then
-		autil.log('err', 'unable to lock ' .. lockfilename .. '; another instance is running')
-		os.exit(1)
-	end
-
-	return lockfd
+local ok, _ = fcntl.fcntl(lockfd, fcntl.F_SETLK, {
+  l_start = 0,
+  l_len = 0,
+  l_type = fcntl.F_WRLCK,
+  l_whence = unistd.SEEK_SET,
+})
+if not ok then
+  local err_msg = string.format("Unable to lock file %s. ", lockfilename) ..
+    "Make sure there is no other instance of this script running."
+  autil.log('err', err_msg)
+  os.exit(1)
 end
 
 local function parse_args()
-	local i = 1
-	while arg[i] do
-		if arg[i] == '-f' then
-			force = true
-		elseif arg[i] == '-b' then
-			i = i + 1
-			if not arg[i] then
-				autil.log('err', 'error parsing command line: expected branch name')
-				os.exit(1)
-			end
-			branch_name = arg[i]
-		else
-			autil.log('err', "error parsing command line: unexpected argument: '" .. arg[i] .. "'")
-			os.exit(1)
-		end
-		i = i + 1
-	end
+local i = 1
+  while arg[i] do
+    if arg[i] == '-f' then
+      force = true
+    elseif arg[i] == '-b' then
+      i=i+1
+
+      if not arg[i] then
+        autil.log('err', 'Error parsing command line: expected branch name')
+        os.exit(1)
+      end
+
+      branch_name = arg[i]
+    else
+      autil.log('err', "Error parsing command line: unexpected argument: '" .. arg[i] .. "'")
+      os.exit(1)
+    end
+    i = i+1
+  end
 end
 
 local function preflight_check()
-	if not uci:get_bool(configname, 'settings', 'enabled') then
-		return false
-	end
-	if not uci:get_bool('autoupdater', 'settings', 'enabled') then
-		return false
-	end
+  if not uci:get_bool(configname, 'settings', 'enabled') then
+    return false
+  end
+  if not uci:get_bool('autoupdater', 'settings', 'enabled') then
+    return false
+  end
+  if tonumber(util.readfile('/proc/uptime'):match('^([^ ]+) ')) < min_uptime_secs then
+    return false
+  end
 
-	local uptime_f = io.open('/proc/uptime', 'r')
-	local uptime = 0
-	if uptime_f then
-		uptime = tonumber((uptime_f:read('*l') or ''):match('^([^ ]+)')) or 0
-		uptime_f:close()
-	end
-	if uptime < config_number('min_uptime', 3600) then
-		return false
-	end
-
-	return true
+  return true
 end
 
 local function connectivity_check()
-	if autil.batman_gateway_available() then
-		return true
-	end
+  -- The fallback is only meant to recover nodes that lost mesh connectivity.
+  -- Do not check IPv4 default routes or update-server reachability here; a
+  -- local WAN uplink without a batman-adv gateway is irrelevant for this use
+  -- case.
+  --
+  -- batctl gwl always prints a header containing MAC addresses such as
+  -- MainIF/MAC and bat0/MAC, even when no gateway is available. Therefore we
+  -- must not search for an arbitrary MAC address. Instead, match real gateway
+  -- table rows only, e.g.:
+  --   * 02:ca:ff:ee:01:47 (255) 02:ca:ff:ee:01:47 [ mesh-vpn]: ...
+  local f = io.popen('batctl gwl 2>/dev/null')
+  if f then
+    for line in f:lines() do
+      if line:match('^%s*%*?%s*%x%x:%x%x:%x%x:%x%x:%x%x:%x%x%s+%(%s*%d+%)%s+%x%x:%x%x:%x%x:%x%x:%x%x:%x%x%s+%[') then
+        f:close()
+        return true
+      end
+    end
+    f:close()
+  end
 
-	autil.log('out', 'connectivity check failed: batctl gwl returned no gateway')
-	return false
+  autil.log('out', 'mesh gateway check failed')
+  return false
 end
 
 local function run_autoupdater()
-	autil.log('out', 'executing the autoupdater...')
-	return os.execute('/usr/sbin/autoupdater -f -b ' .. autil.shell_quote(branch_name))
+  autil.log('out', 'executing the autoupdater...')
+  os.execute('/usr/sbin/autoupdater -f -b ' .. branch_name)
 end
 
-local function backup_configs()
-	run('rm -rf ' .. autil.shell_quote(backupdir))
-	run('mkdir -p ' .. autil.shell_quote(backupdir))
-
-	for _, config in ipairs({'wireless', 'network', 'firewall', 'tunneldigger', 'pump'}) do
-		local src = '/etc/config/' .. config
-		if autil.file_exists(src) then
-			run('cp -p ' .. autil.shell_quote(src) .. ' ' .. autil.shell_quote(backupdir .. '/' .. config))
-		end
-	end
+local function file_exists(path)
+  local f = io.open(path, 'r')
+  if f then
+    f:close()
+    return true
+  end
+  return false
 end
 
-local function restore_configs()
-	autil.log('out', 'restoring wireless/network state')
-
-	for _, config in ipairs({'wireless', 'network', 'firewall', 'tunneldigger', 'pump'}) do
-		local saved = backupdir .. '/' .. config
-		if autil.file_exists(saved) then
-			run('cp -p ' .. autil.shell_quote(saved) .. ' ' .. autil.shell_quote('/etc/config/' .. config))
-		end
-	end
-
-	-- Drop stale UCI cursor state after overwriting files on disk.
-	run('uci -q revert wireless')
-	run('uci -q revert network')
-	run('uci -q revert firewall')
-	run('uci -q revert tunneldigger')
-	run('uci -q revert pump')
-
-	-- If PUMP is installed, re-materialize its derived wifi/network/firewall/DNS
-	-- state after the raw UCI snapshot has been restored. This recreates
-	-- wireless.pump_* / wireless.pump_uplink, pump_wan, tunneldigger binding and
-	-- WAN firewall membership according to /etc/config/pump.
-	if autil.pump_installed() and autil.executable_exists('/lib/gluon/upgrade/335-gluon-pump') then
-		autil.log('out', 'PUMP detected, re-applying /lib/gluon/upgrade/335-gluon-pump')
-		run('/lib/gluon/upgrade/335-gluon-pump >/dev/null 2>&1')
-	end
-
-	run('uci -q commit wireless')
-	run('uci -q commit network')
-	run('uci -q commit firewall')
-	run('uci -q commit tunneldigger')
-	run('uci -q commit pump')
-
-	-- Runtime script: applying the restored network is intentional here. This is
-	-- not Config Mode; the node was temporarily moved into fallback STA mode.
-	run('/etc/init.d/network restart >/dev/null 2>&1')
-	run('sleep 30')
+local function pump_installed()
+  return uci:get('pump', 'settings') ~= nil or file_exists('/etc/config/pump')
 end
 
-local function wait_for_fallback_network()
-	local deadline = os.time() + 30
-	while os.time() < deadline do
-		if os.execute("ifstatus fallback 2>/dev/null | grep -q '\"up\": true'") == 0 then
-			return true
-		end
-		run('sleep 2')
-	end
-	return false
+local function restore_pump_configuration()
+  if pump_installed() and file_exists('/lib/gluon/upgrade/335-gluon-pump') then
+    autil.log('out', 'restoring PUMP-generated configuration')
+    os.execute('/lib/gluon/upgrade/335-gluon-pump')
+  end
 end
 
 local function switch_to_fallback_mode(radio, ssid, bssid)
-	autil.log('out', 'connecting to '  .. radio .. ' ' .. ssid .. ' ' .. bssid)
+  autil.log('out', 'connecting to '  .. radio .. ' ' .. ssid .. ' ' .. bssid)
+  uci:delete_all('wireless', 'wifi-iface')
+  uci:section('wireless', 'wifi-iface', 'fallback', {
+    device = radio,
+    network = 'fallback',
+    mode = 'sta',
+    disabled = false,
+    macaddr = util.generate_mac(3, 10),
+    bssid = bssid,
+    ssid = ssid,
+    ifname = 'fallback',
+    encryption = 'none',
+  })
+  uci:set('wireless', radio, 'disabled', false)
+  uci:save('wireless')
 
-	local wuci = require('simple-uci').cursor()
-	wuci:delete_all('wireless', 'wifi-iface')
-	wuci:section('wireless', 'wifi-iface', 'fallback', {
-		device = radio,
-		network = 'fallback',
-		mode = 'sta',
-		disabled = false,
-		macaddr = util.generate_mac(3, 10),
-		bssid = bssid,
-		ssid = ssid,
-		ifname = 'fallback',
-		encryption = 'none',
-	})
-	wuci:set('wireless', radio, 'disabled', false)
-	wuci:set('wireless', radio, 'channel', 'auto')
-	wuci:save('wireless')
-
-	run('wifi >/dev/null 2>&1')
-	if wait_for_fallback_network() then
-		autil.log('out', 'fallback network is up')
-	else
-		autil.log('out', 'fallback network did not come up in time')
-	end
+  os.execute('wifi')
+  os.execute('sleep 5')
+  uci:revert('wireless')
+  restore_pump_configuration()
+  os.execute('sleep 20')
 end
 
-local function clear_unreachable_state()
-	uci:delete(configname, 'settings', 'unreachable_since')
-	uci:delete(configname, 'settings', 'last_run')
-	uci:save(configname)
+local function revert_to_standard_mode()
+  autil.log('out', 'going back to standard mode')
+  restore_pump_configuration()
+  os.execute('/etc/init.d/network restart')
+  os.execute('sleep 30')
 end
 
-local function remember_unreachable_since()
-	local now = os.time()
-	local unreachable_since = uci:get(configname, 'settings', 'unreachable_since')
-	if not unreachable_since then
-		uci:set(configname, 'settings', 'unreachable_since', now)
-		unreachable_since = now
-	else
-		uci:set(configname, 'settings', 'last_run', now)
-	end
-	uci:save(configname)
-	return tonumber(unreachable_since) or now
-end
-
-lock_or_exit()
 parse_args()
 
-if not branch_name or not uci:get('autoupdater', branch_name) then
-	autil.log('err', 'cant find configuration for branch: ' .. tostring(branch_name))
-	os.exit(1)
+if not uci:get('autoupdater', branch_name) then
+  autil.log('err', 'Cant find configuration for branch: ' .. branch_name)
+  os.exit(1)
 end
 
 if (force or preflight_check()) and not connectivity_check() then
-	local outage_delay = config_number('outage_delay', 2 * 3600)
-	local unreachable_since = remember_unreachable_since()
+  local offset = 2 * 3600
+  local unreachable_since = os.time()
+  if not uci:get('pump-autoupdater-wifi-fallback', 'settings', 'unreachable_since') then
+    uci:set(configname, 'settings', 'unreachable_since', unreachable_since)
+  else
+    uci:set(configname, 'settings', 'last_run', unreachable_since)
+    unreachable_since = uci:get(configname, 'settings', 'unreachable_since')
+  end
+  uci:save(configname)
 
-	if force or unreachable_since + outage_delay < os.time() then
-		autil.log('out', 'going to fallback mode')
-		backup_configs()
-
-		local restored = false
-		local ok, err = pcall(function()
-			local radios = autil.get_available_wifi_networks()
-			for radio, netlist in pairs(radios or {}) do
-				for _, net in ipairs(netlist) do
-					switch_to_fallback_mode(radio, net.ssid, net.bssid)
-					local rc = run_autoupdater()
-					if rc == 0 then
-						autil.log('out', 'autoupdater returned success')
-						restore_configs()
-						restored = true
-						return
-					end
-				end
-			end
-		end)
-
-		if not ok then
-			autil.log('err', 'fallback run failed: ' .. tostring(err))
-		end
-
-		if not restored then
-			restore_configs()
-		end
-	end
+  if force or tonumber(unreachable_since) + offset < os.time() then
+    autil.log('out', 'going to fallback mode')
+    for radio, netlist in pairs(autil.get_available_wifi_networks()) do
+      for _, net in ipairs(netlist) do
+        switch_to_fallback_mode(radio, net.ssid, net.bssid)
+        if run_autoupdater() == 0 then
+          break
+        end
+      end
+    end
+    -- this is only reached if no updated happened
+    revert_to_standard_mode()
+  end
 else
-	clear_unreachable_state()
+  uci:delete(configname, 'settings', 'unreachable_since')
+  uci:delete(configname, 'settings', 'last_run')
+  uci:save(configname)
 end
