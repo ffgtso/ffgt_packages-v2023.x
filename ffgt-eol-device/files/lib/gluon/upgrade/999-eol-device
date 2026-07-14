@@ -7,9 +7,9 @@ EOLFILE="/lib/gluon/eol-devices-${GLUON}"
 branch="$(uci get autoupdater.settings.branch)"
 
 # Skip for "fake" branch mns, we deal with them later ...
-if [ "${branch}" = "mns" ]; then
-  exit 0
-fi
+#if [ "${branch}" = "mns" ]; then
+#  exit 0
+#fi
 
 if [ -e "${EOLFILE}" ]; then
   N1="$(get_image_name)"

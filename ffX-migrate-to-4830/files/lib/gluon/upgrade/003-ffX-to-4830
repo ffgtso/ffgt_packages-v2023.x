@@ -148,16 +148,6 @@ if [ "${former_fw}" = "LIP" -o "${former_fw}" = "WTB" -o "${former_fw}" = "NH" ]
   targetlocode="wtb"
  fi
 
- if [ "${targetlocode}" != "zzz" ]; then
-  if [ "${targetlocode}" = "wtb" ]; then
-   uci set autoupdater.settings.branch='wtb'
-  else
-   uci set autoupdater.settings.branch='mns'
-  fi
-  uci commit autoupdater
-  echo "Moved ${targetlocode} node to autoupdate branch $(uci get autoupdater.settings.branch)." | tee -a /root/multidomain-migration.log
- fi
-
  lat=$(uci get gluon-node-info.@location[0].latitude 2>/dev/null || echo "0.00")
  lon=$(uci get gluon-node-info.@location[0].longitude 2>/dev/null || echo "0.00")
  if [ "${lat}" = "0.00" -o "${lon}" = "0.00" ]; then
@@ -185,6 +175,13 @@ else
  fi
 
  echo "Moving alien setup from ${domain} ..." | tee -a /root/multidomain-migration.log
+fi
+
+aabranch="$(uci get autoupdater.settings.branch)"
+if [ "${aabranch}" = "stable23" -o "${aabranch}" = "mns" -o "${aabranch}" = "wtb" ]; then
+ uci set autoupdater.settings.branch='stable'
+ uci commit autoupdater
+ echo "Moved node to autoupdate branch $(uci get autoupdater.settings.branch) from ${aabranch}." | tee -a /root/multidomain-migration.log
 fi
 
 if [ ! -e /lib/gluon/domains/${domain}.json ]; then
