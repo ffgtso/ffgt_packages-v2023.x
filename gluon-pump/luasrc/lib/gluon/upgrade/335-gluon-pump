@@ -497,10 +497,11 @@ local function configure_pump_wireless(radio, index, enabled)
 		return
 	end
 
-	-- In STA mode, the selected PUMP radio must be able to follow whichever
-	-- PUMP AP it finds. Other AP/mesh VIFs on the same phy would pin the radio
-	-- to their own channel, so we disable them while remembering their state.
-	set_non_pump_ifaces_disabled(radio_name, mode == 'sta')
+	-- PUMP uses the selected radio exclusively in both AP and STA mode.
+	-- In STA mode this is required so the station can scan and follow the AP
+	-- channel.  In AP mode it keeps Gluon's regular client/mesh VIFs from
+	-- sharing the PHY/channel with the planned infrastructure link.
+	set_non_pump_ifaces_disabled(radio_name, true)
 
 	apply_radio_settings(radio)
 

@@ -86,6 +86,12 @@ Im AP-Modus kann für jedes ausgewählte Radio ein Kanal und ein HT-Modus
 festgelegt werden. Nicht ausgewählte Radios zeigen im Config-Mode keine
 PUMP-Kanal-/HT-Felder und werden vom PUMP-Upgrade-Script nicht verändert.
 
+Ein ausgewähltes PUMP-Radio wird auch im AP-Modus exklusiv verwendet: PUMP
+deaktiviert die regulären Gluon-Client-, OWE- und Mesh-VIFs auf demselben Radio
+und merkt sich deren vorherigen `disabled`-Status. Dadurch zeigt auch Gluons
+WLAN-Menü das Radio nicht parallel als normales Mesh-/AP-Radio an. Beim Wechsel
+des Radios oder beim Deaktivieren von PUMP werden die Zustände wiederhergestellt.
+
 Sobald PUMP Kanal oder HT-Modus verwaltet, setzt das Paket:
 
 ```sh
@@ -116,10 +122,10 @@ Die konkrete Kanalbreite der Verbindung wird dann mit dem AP ausgehandelt.
 
 Wichtig: Bei OpenWrt/mac80211 kann ein Radio im STA-Modus nur dann frei scannen
 und dem AP-Kanal folgen, wenn keine anderen AP- oder Mesh-VIFs auf demselben
-PHY den Kanal festnageln. Deshalb deaktiviert PUMP im STA-Modus alle anderen
-`wifi-iface`-Sections auf dem ausgewählten Radio temporär und merkt sich deren
-vorherigen `disabled`-Status in internen `pump.settings.iface_*_disabled`-
-Optionen. Beim Wechsel zurück in den AP-Modus, bei Auswahl eines anderen Radios
+PHY den Kanal festnageln. Deshalb verwendet PUMP das ausgewählte Radio in AP-
+und STA-Modus exklusiv und deaktiviert alle anderen `wifi-iface`-Sections auf
+diesem Radio temporär. Der vorherige `disabled`-Status wird in internen
+`pump.settings.iface_*_disabled`-Optionen gespeichert. Beim Wechsel des Radios
 oder beim Deaktivieren von PUMP werden diese Zustände wiederhergestellt.
 
 
@@ -513,3 +519,13 @@ PUMP upgrade run.
 * `pump_wan` and `pump_wan6` are added to the existing firewall zone named `wan` while WiFi-Uplink is active. This makes the WiFi uplink follow the same WAN-side access rules as the normal `br-wan` uplink, for example SSH access to the node where the site firewall permits it. The previous firewall zone network list is saved in `/etc/config/pump` and restored when WiFi-Uplink is disabled.
 * `pump_wan`/`pump_wan6` now use `peerdns=1`. On `ifup`/`ifupdate` of `pump_wan`, PUMP writes the learned DNS servers to `/var/gluon/wan-dnsmasq/resolv.conf` and restarts `gluon-wan-dnsmasq` if that init script exists. This allows `gluon-wan <command>` and Tunneldigger broker hostname resolution to use DNS learned from the WiFi uplink.
 * Config Mode still does not restart services. DNS and Tunneldigger runtime updates happen via hotplug after `pump_wan` is actually up.
+
+
+### Notes for 0.1.20
+
+* PUMP AP mode now uses the selected radio exclusively, just like PUMP STA mode.
+  Gluon's regular client/AP/OWE/mesh `wifi-iface` sections on the selected radio
+  are disabled while PUMP is active and restored when PUMP is disabled or moved
+  to another radio. This keeps the WLAN Config Mode view consistent and prevents
+  the planned PUMP AP link from sharing its PHY with the normal Gluon AP/mesh
+  roles.
