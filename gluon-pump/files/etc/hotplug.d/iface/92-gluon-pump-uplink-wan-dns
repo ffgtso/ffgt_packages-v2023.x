@@ -1,14 +1,12 @@
 #!/bin/sh
 
-[ "$INTERFACE" = "pump_wan" ] || exit 0
-[ "$(uci -q get pump.settings.uplink_enabled)" = "1" ] || exit 0
-
-case "$ACTION" in
-	ifup|ifupdate)
-		/usr/lib/gluon/pump/wan-dns pump_wan update >/dev/null 2>&1 &
-		;;
-	ifdown)
-		/usr/lib/gluon/pump/wan-dns pump_wan clear >/dev/null 2>&1 &
+# pump_wan and pump_wan6 are registered with gluon-wan-dnsmasq through
+# interface.d. Rebuild its complete resolver list whenever either address
+# family changes; update.lua preserves static DNS and all other WAN uplinks.
+case "$INTERFACE:$ACTION" in
+	pump_wan:ifup|pump_wan:ifupdate|pump_wan:ifdown|\
+	pump_wan6:ifup|pump_wan6:ifupdate|pump_wan6:ifdown)
+		/lib/gluon/wan-dnsmasq/update.lua
 		;;
 esac
 

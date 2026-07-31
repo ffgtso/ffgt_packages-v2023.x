@@ -113,7 +113,9 @@ local function ensure_wifi_uplink_network()
 	end
 	uci:set('network', name, 'proto', 'dhcp')
 	uci:set('network', name, 'auto', '1')
-	uci:set('network', name, 'peerdns', '1')
+	-- Keep uplink DNS separate from the node's primary resolver. Gluon's
+	-- wan-dnsmasq collects the inactive DNS data from this interface.
+	uci:set('network', name, 'peerdns', '0')
 	uci:delete('network', name, 'type')
 	uci:delete('network', name, 'ifname')
 
@@ -124,7 +126,7 @@ local function ensure_wifi_uplink_network()
 	uci:set('network', name6, 'ifname', '@' .. name)
 	uci:set('network', name6, 'ip6table', '1')
 	uci:set('network', name6, 'sourcefilter', '0')
-	uci:set('network', name6, 'peerdns', '1')
+	uci:set('network', name6, 'peerdns', '0')
 	uci:set('network', name6, 'reqprefix', 'no')
 
 	uci:set('pump', 'settings', 'uplink_network_iface', '1')
