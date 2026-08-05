@@ -275,7 +275,121 @@ Hat `gluon.wireless.preserve_channels` bereits vor PUMP auf `1` gestanden,
 betrachtet PUMP diese Einstellung nicht als Eigentum des Pakets und löscht sie
 beim Deaktivieren nicht.
 
-## UCI
+## Konfiguration im Freifunkmodus
+
+### CLI
+
+Ab Version 0.1.22 installiert das Paket die CLI `/usr/sbin/gluon-pump`. Der
+Config-Mode und die CLI verwenden dasselbe Lua-Modul
+`gluon.pump.config` zum Validieren, Speichern und Materialisieren der
+Konfiguration. Dadurch gibt es keinen zweiten, abweichenden UCI-Codepfad für
+bereits im Feld installierte Knoten.
+
+Status, verfügbare Radios und empfangene Upstream-Netze anzeigen:
+
+```sh
+gluon-pump status
+gluon-pump radios
+gluon-pump scan
+gluon-pump scan --radio radio1
+```
+
+Passwörter werden von `status` standardmäßig nicht ausgegeben. Nur bei
+ausdrücklichem Bedarf:
+
+```sh
+gluon-pump status --show-secrets
+```
+
+PUMP-AP konfigurieren:
+
+```sh
+gluon-pump pump --enable --mode ap --radio radio1 \
+  --channel radio1=44 --htmode radio1=VHT80
+```
+
+PUMP-STA konfigurieren:
+
+```sh
+gluon-pump pump --enable --mode sta --radio radio1 \
+  --htmode radio1=auto
+```
+
+PUMP deaktivieren:
+
+```sh
+gluon-pump pump --disable
+```
+
+WiFi-Uplink mit fester BSSID konfigurieren:
+
+```sh
+gluon-pump uplink --enable --radio radio1 --ssid 'UpstreamSSID' \
+  --bssid 'aa:bb:cc:dd:ee:ff' --bssid-lock 1 \
+  --encryption psk2 --key 'upstream-passphrase' \
+  --htmode VHT80 --powersave 0
+```
+
+Damit das Kennwort nicht in der Shell-History oder Prozessliste steht, kann es
+auch aus einer nur für root lesbaren Datei oder von Standard Input gelesen
+werden:
+
+```sh
+gluon-pump uplink --enable --radio radio1 --ssid 'UpstreamSSID' \
+  --bssid-lock 0 --encryption psk2 --key-file /tmp/uplink-key
+printf '%s\n' 'upstream-passphrase' | \
+  gluon-pump uplink --enable --radio radio1 --ssid 'UpstreamSSID' \
+    --bssid-lock 0 --encryption psk2 --key-file -
+```
+
+Ohne BSSID-Bindung darf sich der Supplicant mit jedem passenden AP derselben
+SSID verbinden:
+
+```sh
+gluon-pump uplink --enable --radio radio1 --ssid 'UpstreamSSID' \
+  --bssid-lock 0 --encryption sae-mixed --key 'upstream-passphrase'
+```
+
+Offenes Upstream-Netz beziehungsweise Uplink deaktivieren:
+
+```sh
+gluon-pump uplink --enable --radio radio1 --ssid 'OpenNet' \
+  --bssid-lock 0 --encryption none
+gluon-pump uplink --disable
+```
+
+Die Konfigurationsbefehle validieren alle Werte, committen `/etc/config/pump`
+und führen `335-gluon-pump` aus. Damit sind auch die abgeleiteten Sections in
+`wireless`, `network`, `firewall` und `tunneldigger` konsistent. Sie laden das
+laufende WLAN und Netzwerk absichtlich noch nicht neu. So kann die neue
+Konfiguration über eine bestehende SSH-Verbindung zuerst geprüft werden:
+
+```sh
+gluon-pump validate
+gluon-pump status
+uci show wireless | grep pump
+uci show network | grep pump
+```
+
+Erst der ausdrückliche Apply-Schritt aktiviert sie ohne Neustart:
+
+```sh
+gluon-pump apply
+```
+
+Alternativ kann `--apply` direkt an `pump` oder `uplink` angehängt werden.
+`apply` lädt Netzwerk, Firewall und WLAN neu und kann deshalb die aktuelle
+SSH-Verbindung unterbrechen, insbesondere wenn deren Funkinterface durch die
+exklusive PUMP-Nutzung deaktiviert wird. Bei Fernwartung sollte der getrennte
+Apply-Schritt oder ein geplanter Reboot verwendet werden.
+
+Alle Befehle und Optionen zeigt:
+
+```sh
+gluon-pump --help
+```
+
+### Direkte UCI-Konfiguration
 
 Standardkonfiguration:
 
@@ -299,7 +413,12 @@ config settings 'settings'
 	option tunneldigger_bind_interface '0' # intern: Ownership für Tunneldigger bind_interface
 ```
 
-Beispiel AP-Seite:
+Die direkte UCI-Konfiguration bleibt für Diagnose- und Migrationszwecke
+möglich. Für normale Änderungen wird die CLI empfohlen, weil sie Werte vor dem
+Commit validiert und alle abgeleiteten Sections über denselben Codepfad wie der
+Config-Mode aktualisiert.
+
+Beispiel AP-Seite mit direktem UCI-Zugriff:
 
 ```sh
 uci set pump.settings.enabled='1'

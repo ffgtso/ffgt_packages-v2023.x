@@ -2,15 +2,7 @@ local iwinfo = require 'iwinfo'
 local uci = require('simple-uci').cursor()
 local wireless = require 'gluon.wireless'
 local pump = require 'gluon.pump'
-
-
-local function commit_upgrade_state()
-	-- 335-gluon-pump runs in a separate process and writes its changes through
-	-- UCI. Commit those freshly materialized changes with the CLI instead of
-	-- committing this config-mode cursor again; the cursor may still contain
-	-- pre-upgrade values such as tunneldigger.*.bind_interface='br-wan'.
-	os.execute('uci -q commit pump >/dev/null 2>&1; uci -q commit gluon >/dev/null 2>&1; uci -q commit network >/dev/null 2>&1; uci -q commit wireless >/dev/null 2>&1; uci -q commit firewall >/dev/null 2>&1; uci -q commit tunneldigger >/dev/null 2>&1')
-end
+local pump_config = require 'gluon.pump.config'
 
 local f = Form(translate('PUMP'))
 
@@ -65,7 +57,6 @@ radio:depends(enabled, true)
 radio:value('all', translate('All radios'))
 
 local radio_options = {}
-local radio_configs = {}
 
 local function channel_label(entry)
 	local channel = tostring(entry.channel)
@@ -143,33 +134,10 @@ local function add_htmode_values(option, radio_config)
 	end
 end
 
-local function best_htmode(radio_config)
-	local phy = wireless.find_phy(radio_config)
-	if not phy then
-		return nil
-	end
-
-	local htmodelist = iwinfo.nl80211.htmodelist(phy) or {}
-	local preferred_order = {
-		'HE160', 'HE80', 'HE40', 'HE20',
-		'VHT160', 'VHT80', 'VHT40', 'VHT20',
-		'HT40', 'HT20',
-	}
-
-	for _, htmode in ipairs(preferred_order) do
-		if htmodelist[htmode] then
-			return htmode
-		end
-	end
-
-	return nil
-end
-
 wireless.foreach_radio(uci, function(r)
 	local radio_name = r['.name']
 	local band = r.band or translate('unknown band')
 	radio:value(radio_name, radio_name .. ' (' .. band .. ')')
-	radio_configs[radio_name] = r
 end)
 radio.default = uci:get('pump', 'settings', 'radio') or 'all'
 
@@ -191,193 +159,17 @@ wireless.foreach_radio(uci, function(r)
 	radio_options[radio_name].htmode = htmode
 end)
 
-local function selected_radio_matches(radio_name)
-	local selected = radio.data or uci:get('pump', 'settings', 'radio') or 'all'
-	return pump.radio_selected(selected, radio_name)
-end
-
-local function ensure_gluon_wireless()
-	if not uci:get('gluon', 'wireless') then
-		uci:section('gluon', 'wireless', 'wireless', {})
-	end
-end
-
-local own_preserve_channels = uci:get_bool('pump', 'settings', 'preserve_channels')
-
-local function ensure_preserve_channels()
-	ensure_gluon_wireless()
-	if not uci:get_bool('gluon', 'wireless', 'preserve_channels') then
-		own_preserve_channels = true
-	end
-	uci:set('gluon', 'wireless', 'preserve_channels', '1')
-	uci:set('pump', 'settings', 'preserve_channels', own_preserve_channels and '1' or '0')
-end
-
-local function restore_site_wireless_if_owned()
-	if own_preserve_channels then
-		uci:delete('gluon', 'wireless', 'preserve_channels')
-		uci:set('pump', 'settings', 'preserve_channels', '0')
-		own_preserve_channels = false
-		return true
-	end
-
-	return false
-end
-
-local function write_radio_options(radio_name, options, uplink_radio_name)
-	if not enabled.data then
-		return
-	end
-
-	if uplink_radio_name == radio_name then
-		return
-	end
-
-	if not selected_radio_matches(radio_name) then
-		return
-	end
-
-	local selected_mode = mode.data == 'sta' and 'sta' or 'ap'
-	local channel_data = options.channel and options.channel.data or nil
-	local htmode_data = options.htmode and options.htmode.data or nil
-
-	ensure_preserve_channels()
-
-	if selected_mode == 'sta' then
-		-- In station mode, the AP shall determine the channel. Setting channel=auto
-		-- makes the STA scan and associate to any matching PUMP AP.
-		uci:set('wireless', radio_name, 'channel', 'auto')
-		uci:delete('pump', 'settings', radio_name .. '_channel')
-	else
-		if channel_data == nil or channel_data == '' then
-			channel_data = uci:get('wireless', radio_name, 'channel') or 'auto'
-		end
-		uci:set('wireless', radio_name, 'channel', channel_data)
-		uci:set('pump', 'settings', radio_name .. '_channel', channel_data)
-	end
-
-	if htmode_data == nil or htmode_data == '' or htmode_data == 'auto' then
-		htmode_data = best_htmode(radio_configs[radio_name]) or uci:get('wireless', radio_name, 'htmode') or 'HT20'
-		uci:set('pump', 'settings', radio_name .. '_htmode', 'auto')
-	else
-		uci:set('pump', 'settings', radio_name .. '_htmode', htmode_data)
-	end
-
-	uci:set('wireless', radio_name, 'htmode', htmode_data)
-end
-
-local function table_to_string(value)
-	if type(value) ~= 'table' then
-		return tostring(value or '')
-	end
-
-	local parts = {}
-	for _, v in pairs(value) do
-		parts[#parts + 1] = tostring(v)
-	end
-	return table.concat(parts, ' ')
-end
-
-local function encryption_description(entry)
-	local enc = entry.encryption
-	if not enc or not enc.enabled then
-		return translate('open')
-	end
-
-	if enc.description and enc.description ~= '' then
-		return tostring(enc.description)
-	end
-
-	local auth = table_to_string(enc.auth_suites or enc.authentication):upper()
-	if auth:match('SAE') and auth:match('PSK') then
-		return 'WPA2/WPA3 PSK/SAE'
-	elseif auth:match('SAE') then
-		return 'WPA3 SAE'
-	elseif tonumber(enc.wpa) and tonumber(enc.wpa) >= 2 then
-		return 'WPA2 PSK'
-	elseif tonumber(enc.wpa) and tonumber(enc.wpa) == 1 then
-		return 'WPA PSK'
-	end
-
-	return translate('encrypted')
-end
-
-local function encryption_to_uci(entry)
-	local enc = entry.encryption
-	if not enc or not enc.enabled then
-		return 'none'
-	end
-
-	local auth = table_to_string(enc.auth_suites or enc.authentication):upper()
-	if auth:match('802%.1X') or auth:match('EAP') then
-		return nil
-	end
-
-	if auth:match('SAE') and auth:match('PSK') then
-		return 'sae-mixed'
-	elseif auth:match('SAE') then
-		return 'sae'
-	elseif tonumber(enc.wpa) and tonumber(enc.wpa) >= 2 then
-		return 'psk2'
-	elseif tonumber(enc.wpa) and tonumber(enc.wpa) == 1 then
-		return 'psk'
-	end
-
-	-- Most personal WLANs expose enough scan metadata to be detected above. If
-	-- metadata is incomplete but the BSS is encrypted, use WPA2-PSK as the least
-	-- surprising fallback for a home/office uplink.
-	return 'psk2'
-end
-
 local scan_entries = {}
 local scan_order = {}
-
-local function scan_radio_networks(radio_name, radio_config)
-	local phy = wireless.find_phy(radio_config)
-	if not phy then
-		return
-	end
-
-	local ok, scanlist = pcall(iwinfo.nl80211.scanlist, phy)
-	if not ok or not scanlist then
-		return
-	end
-
-	for _, entry in ipairs(scanlist) do
-		local entry_ssid = pump.non_empty(entry.ssid)
-		local bssid = pump.non_empty(entry.bssid)
-		local uci_encryption = encryption_to_uci(entry)
-
-		if entry_ssid and bssid and uci_encryption then
-			local value = radio_name .. '|' .. bssid
-			local channel = entry.channel and ('ch ' .. tostring(entry.channel)) or translate('channel unknown')
-			local signal = entry.signal and (tostring(entry.signal) .. ' dBm') or translate('signal unknown')
-			local label = string.format('%s: %s (%s, %s, %s, %s)', radio_name, entry_ssid, bssid, channel, signal, encryption_description(entry))
-
-			scan_entries[value] = {
-				radio = radio_name,
-				ssid = entry_ssid,
-				bssid = bssid,
-				encryption = uci_encryption,
-				label = label,
-			}
-			scan_order[#scan_order + 1] = value
-		end
-	end
+for _, entry in ipairs(pump_config.scan({uci = uci})) do
+	local value = entry.radio .. '|' .. entry.bssid
+	local channel = entry.channel and ('ch ' .. tostring(entry.channel)) or translate('channel unknown')
+	local signal = entry.signal and (tostring(entry.signal) .. ' dBm') or translate('signal unknown')
+	entry.label = string.format('%s: %s (%s, %s, %s, %s)', entry.radio, entry.ssid,
+		entry.bssid, channel, signal, entry.description or translate('encrypted'))
+	scan_entries[value] = entry
+	scan_order[#scan_order + 1] = value
 end
-
-for radio_name, radio_config in pairs(radio_configs) do
-	scan_radio_networks(radio_name, radio_config)
-end
-
-table.sort(scan_order, function(a, b)
-	local ea = scan_entries[a]
-	local eb = scan_entries[b]
-	if ea.radio == eb.radio then
-		return ea.ssid < eb.ssid
-	end
-	return ea.radio < eb.radio
-end)
 
 local us = f:section(Section, translate('WiFi uplink'), translate(
 	'Select one of the received WLANs as a WAN uplink. The selected radio is used ' ..
@@ -496,32 +288,24 @@ function uplink_info:write()
 end
 
 function f:write()
-	if not uci:get('pump', 'settings') then
-		uci:section('pump', 'settings', 'settings', {})
-	end
-
-	local old_uplink_enabled = uci:get_bool('pump', 'settings', 'uplink_enabled')
-	local old_uplink_radio = pump.non_empty(uci:get('pump', 'settings', 'uplink_radio'))
-	local old_uplink_ssid = pump.non_empty(uci:get('pump', 'settings', 'uplink_ssid'))
-	local old_uplink_bssid = pump.non_empty(uci:get('pump', 'settings', 'uplink_bssid'))
-
 	local new_pump_enabled = enabled.data and pump.config_is_valid()
 	local new_mode = mode.data == 'sta' and 'sta' or 'ap'
 	local new_radio = radio.data or 'all'
-
-	uci:set('pump', 'settings', 'enabled', new_pump_enabled and '1' or '0')
-	uci:set('pump', 'settings', 'mode', new_mode)
-	uci:set('pump', 'settings', 'radio', new_radio)
+	local changes = {
+		enabled = new_pump_enabled,
+		mode = new_mode,
+		radio = new_radio,
+	}
 
 	local selected_uplink_value = uplink_network.data or ''
 	local selected_uplink = scan_entries[selected_uplink_value]
 	local new_uplink_enabled = uplink_enabled.data and selected_uplink ~= nil and pump.non_empty(selected_uplink.ssid) ~= nil and pump.non_empty(selected_uplink.radio) ~= nil
 	local new_uplink_bssid = nil
 
-	uci:set('pump', 'settings', 'uplink_enabled', new_uplink_enabled and '1' or '0')
-	uci:set('pump', 'settings', 'uplink_key', uplink_key.data or '')
-	uci:set('pump', 'settings', 'uplink_htmode', uplink_htmode.data or 'auto')
-	uci:set('pump', 'settings', 'uplink_powersave', uplink_powersave.data and '1' or '0')
+	changes.uplink_enabled = new_uplink_enabled
+	changes.uplink_key = uplink_key.data or ''
+	changes.uplink_htmode = uplink_htmode.data or 'auto'
+	changes.uplink_powersave = uplink_powersave.data and true or false
 
 	if new_uplink_enabled then
 		local submitted_bssid = pump.non_empty(uplink_bssid.data)
@@ -538,49 +322,34 @@ function f:write()
 			new_uplink_bssid = submitted_bssid or selected_uplink.bssid
 		end
 
-		uci:set('pump', 'settings', 'uplink_radio', selected_uplink.radio)
-		uci:set('pump', 'settings', 'uplink_ssid', selected_uplink.ssid)
-		uci:set('pump', 'settings', 'uplink_bssid', new_uplink_bssid or '')
-		uci:set('pump', 'settings', 'uplink_bssid_lock', uplink_bssid_lock.data and '1' or '0')
-		uci:set('pump', 'settings', 'uplink_encryption', pump.normalize_encryption(selected_uplink.encryption))
-	else
-		uci:set('pump', 'settings', 'uplink_enabled', '0')
+		changes.uplink_radio = selected_uplink.radio
+		changes.uplink_ssid = selected_uplink.ssid
+		changes.uplink_bssid = new_uplink_bssid or ''
+		changes.uplink_bssid_lock = uplink_bssid_lock.data and true or false
+		changes.uplink_encryption = pump.normalize_encryption(selected_uplink.encryption)
 	end
 
 	local uplink_radio_name = new_uplink_enabled and selected_uplink.radio or nil
-	local should_restore_site_wireless = false
-
 	if new_pump_enabled then
 		for radio_name, options in pairs(radio_options) do
-			write_radio_options(radio_name, options, uplink_radio_name)
+			if radio_name ~= uplink_radio_name and pump.radio_selected(new_radio, radio_name) then
+				if new_mode == 'ap' and options.channel and options.channel.data then
+					changes[radio_name .. '_channel'] = options.channel.data
+				end
+				if options.htmode and options.htmode.data then
+					changes[radio_name .. '_htmode'] = options.htmode.data
+				end
+			end
 		end
 	end
 
-	if not new_pump_enabled and not new_uplink_enabled then
-		should_restore_site_wireless = restore_site_wireless_if_owned()
+	-- The CLI and Config Mode share this exact write/materialize path. Runtime
+	-- services are deliberately not reloaded in Config Mode; the normal reboot
+	-- after leaving Config Mode activates the materialized configuration.
+	local ok, err = pump_config.configure(changes, {uci = uci})
+	if not ok then
+		error(err)
 	end
-
-	uci:commit('pump')
-	uci:commit('gluon')
-	uci:commit('wireless')
-
-	if should_restore_site_wireless then
-		os.execute('/lib/gluon/upgrade/200-wireless')
-		uci:commit('network')
-		uci:commit('wireless')
-	end
-
-	local uplink_changed = old_uplink_enabled ~= new_uplink_enabled
-		or old_uplink_radio ~= (new_uplink_enabled and selected_uplink.radio or nil)
-		or old_uplink_ssid ~= (new_uplink_enabled and selected_uplink.ssid or nil)
-		or old_uplink_bssid ~= (new_uplink_enabled and new_uplink_bssid or nil)
-
-	-- Materialize derived UCI sections (wireless/network/tunneldigger) so the
-	-- saved configuration is complete. Do not reload WiFi/network and do not
-	-- start or restart Tunneldigger from Config Mode: pumpwan does not need to
-	-- exist here, and normal boot/hotplug processing applies the runtime state.
-	os.execute('/lib/gluon/upgrade/335-gluon-pump')
-	commit_upgrade_state()
 end
 
 return f

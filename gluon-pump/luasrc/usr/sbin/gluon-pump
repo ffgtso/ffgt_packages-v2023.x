@@ -1,0 +1,214 @@
+#!/usr/bin/lua
+
+local config = require 'gluon.pump.config'
+
+local function fail(message, code)
+	io.stderr:write('gluon-pump: ' .. tostring(message) .. '\n')
+	os.exit(code or 1)
+end
+
+local function usage(code)
+	local out = code == 0 and io.stdout or io.stderr
+	out:write([[
+Usage:
+  gluon-pump status [--show-secrets]
+  gluon-pump radios
+  gluon-pump scan [--radio radioN]
+  gluon-pump validate
+  gluon-pump pump [--enable|--disable] [--mode ap|sta]
+             [--radio all|radioN] [--channel radioN=value]
+             [--htmode radioN=value] [--mesh-no-rebroadcast 0|1] [--apply]
+  gluon-pump uplink --enable --radio radioN --ssid SSID
+             --encryption none|psk|psk2|sae|sae-mixed
+             [--key KEY|--key-file FILE|-] [--bssid MAC] [--bssid-lock 0|1]
+             [--htmode auto|MODE] [--powersave 0|1] [--apply]
+  gluon-pump uplink --disable [--apply]
+  gluon-pump apply
+
+Configuration commands validate, save and materialize UCI state but do not
+reload the running network unless --apply is supplied. The separate apply
+command may interrupt wireless connectivity and the current SSH session.
+]])
+	os.exit(code or 0)
+end
+
+local function bool_arg(value, option)
+	if value == '1' or value == 'true' or value == 'yes' or value == 'on' then
+		return true
+	elseif value == '0' or value == 'false' or value == 'no' or value == 'off' then
+		return false
+	end
+	fail(option .. ' expects 0 or 1', 2)
+end
+
+local function parse_options(start_index, specifications)
+	local values = {apply = false}
+	local i = start_index
+	while i <= #arg do
+		local option = arg[i]
+		if option == '--apply' then
+			values.apply = true
+			i = i + 1
+		elseif option == '--enable' then
+			values.enabled = true
+			i = i + 1
+		elseif option == '--disable' then
+			values.enabled = false
+			i = i + 1
+		elseif option == '--help' or option == '-h' then
+			usage(0)
+		else
+			local name = option:match('^%-%-(.+)$')
+			local spec = name and specifications[name] or nil
+			if not spec then
+				fail('unknown option: ' .. tostring(option), 2)
+			end
+			local value = arg[i + 1]
+			if value == nil then
+				fail(option .. ' requires a value', 2)
+			end
+			if spec == 'multi' then
+				values[name] = values[name] or {}
+				values[name][#values[name] + 1] = value
+			elseif spec == 'bool' then
+				values[name] = bool_arg(value, option)
+			else
+				values[name] = value
+			end
+			i = i + 2
+		end
+	end
+	return values
+end
+
+local function configure(changes, runtime)
+	local ok, err = config.configure(changes, {runtime = runtime})
+	if not ok then
+		fail(err)
+	end
+	io.stdout:write('PUMP configuration saved and materialized.\n')
+	if not runtime then
+		io.stdout:write("Run 'gluon-pump apply' to activate it without rebooting.\n")
+	end
+end
+
+local function read_key_file(path)
+	local file
+	if path == '-' then
+		file = io.stdin
+	else
+		file = io.open(path, 'r')
+		if not file then fail('cannot read key file: ' .. tostring(path), 2) end
+	end
+	local value = file:read('*a') or ''
+	if file ~= io.stdin then file:close() end
+	return value:gsub('[\r\n]+$', '')
+end
+
+local function print_status(show_secrets)
+	local status = config.status()
+	local s = status.settings
+	local function value(name, default)
+		local result = s[name]
+		if result == nil or type(result) == 'table' then return default or '' end
+		return tostring(result)
+	end
+
+	print('PUMP SSID: ' .. status.ssid)
+	print('PUMP key: ' .. (show_secrets and require('gluon.pump').key() or '<hidden>'))
+	print('PUMP enabled: ' .. value('enabled', '0'))
+	print('PUMP mode: ' .. value('mode', 'ap'))
+	print('PUMP radio: ' .. value('radio', 'all'))
+	for _, radio in ipairs(config.radios()) do
+		print(string.format('  %s: channel=%s htmode=%s', radio.name,
+			value(radio.name .. '_channel', radio.channel or 'auto'),
+			value(radio.name .. '_htmode', radio.htmode or 'auto')))
+	end
+	print('WiFi uplink enabled: ' .. value('uplink_enabled', '0'))
+	print('WiFi uplink radio: ' .. value('uplink_radio'))
+	print('WiFi uplink SSID: ' .. value('uplink_ssid'))
+	print('WiFi uplink BSSID: ' .. value('uplink_bssid'))
+	print('WiFi uplink BSSID lock: ' .. value('uplink_bssid_lock', '1'))
+	print('WiFi uplink encryption: ' .. value('uplink_encryption', 'auto'))
+	print('WiFi uplink key: ' .. (show_secrets and value('uplink_key') or '<hidden>'))
+	print('WiFi uplink HT mode: ' .. value('uplink_htmode', 'auto'))
+	print('WiFi uplink power saving: ' .. value('uplink_powersave', '0'))
+	print('Configuration valid: ' .. (status.config_valid and 'yes' or 'no'))
+	if status.validation_error then print('Validation error: ' .. status.validation_error) end
+end
+
+local command = arg[1]
+if not command or command == '--help' or command == '-h' or command == 'help' then
+	usage(0)
+elseif command == 'status' then
+	if arg[2] and arg[2] ~= '--show-secrets' then fail('unknown option: ' .. arg[2], 2) end
+	print_status(arg[2] == '--show-secrets')
+elseif command == 'radios' then
+	for _, radio in ipairs(config.radios()) do
+		print(string.format('%s\tphy=%s\tband=%s\tchannel=%s\thtmode=%s',
+			radio.name, radio.phy or '', radio.band or '', radio.channel or '', radio.htmode or ''))
+	end
+elseif command == 'scan' then
+	local options = parse_options(2, {radio = 'value'})
+	for _, network in ipairs(config.scan({radio = options.radio})) do
+		print(string.format('%s\t%s\t%s\t%s\tchannel=%s\tsignal=%s\t%s',
+			network.radio, network.bssid, network.encryption, network.ssid,
+			network.channel or '', network.signal or '', network.description or ''))
+	end
+elseif command == 'validate' then
+	local ok, err = config.validate()
+	if not ok then fail(err) end
+	print('PUMP configuration is valid.')
+elseif command == 'pump' then
+	local options = parse_options(2, {
+		mode = 'value', radio = 'value', channel = 'multi', htmode = 'multi',
+		['mesh-no-rebroadcast'] = 'bool',
+	})
+	local changes = {}
+	if options.enabled ~= nil then changes.enabled = options.enabled end
+	if options.mode ~= nil then changes.mode = options.mode end
+	if options.radio ~= nil then changes.radio = options.radio end
+	if options['mesh-no-rebroadcast'] ~= nil then
+		changes.mesh_no_rebroadcast = options['mesh-no-rebroadcast']
+	end
+	for _, assignment in ipairs(options.channel or {}) do
+		local radio, value = assignment:match('^(radio%d+)=(.+)$')
+		if not radio then fail('--channel expects radioN=value', 2) end
+		changes[radio .. '_channel'] = value
+	end
+	for _, assignment in ipairs(options.htmode or {}) do
+		local radio, value = assignment:match('^(radio%d+)=(.+)$')
+		if not radio then fail('--htmode expects radioN=value', 2) end
+		changes[radio .. '_htmode'] = value
+	end
+	configure(changes, options.apply)
+elseif command == 'uplink' then
+	local options = parse_options(2, {
+		radio = 'value', ssid = 'value', encryption = 'value', key = 'value',
+		['key-file'] = 'value', bssid = 'value', ['bssid-lock'] = 'bool',
+		htmode = 'value', powersave = 'bool',
+	})
+	if options.enabled == nil then
+		fail('uplink requires --enable or --disable', 2)
+	end
+	local changes = {uplink_enabled = options.enabled}
+	if options.radio ~= nil then changes.uplink_radio = options.radio end
+	if options.ssid ~= nil then changes.uplink_ssid = options.ssid end
+	if options.encryption ~= nil then changes.uplink_encryption = options.encryption end
+	if options.key ~= nil and options['key-file'] ~= nil then
+		fail('--key and --key-file are mutually exclusive', 2)
+	end
+	if options.key ~= nil then changes.uplink_key = options.key end
+	if options['key-file'] ~= nil then changes.uplink_key = read_key_file(options['key-file']) end
+	if options.bssid ~= nil then changes.uplink_bssid = options.bssid end
+	if options['bssid-lock'] ~= nil then changes.uplink_bssid_lock = options['bssid-lock'] end
+	if options.htmode ~= nil then changes.uplink_htmode = options.htmode end
+	if options.powersave ~= nil then changes.uplink_powersave = options.powersave end
+	configure(changes, options.apply)
+elseif command == 'apply' then
+	local ok, err = config.runtime_apply()
+	if not ok then fail(err) end
+	print('PUMP runtime state applied.')
+else
+	fail('unknown command: ' .. tostring(command), 2)
+end

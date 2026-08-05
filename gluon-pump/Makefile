@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=gluon-pump
-PKG_VERSION:=0.1.21
+PKG_VERSION:=0.1.22
 PKG_RELEASE:=1
 
 PKG_MAINTAINER:=Freifunk <firmware@freifunk.net>
