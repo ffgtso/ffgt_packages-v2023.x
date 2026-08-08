@@ -44,15 +44,6 @@ if [ -e /lib/gluon/config-mode/reboot-ffgt ]; then
   mv /lib/gluon/config-mode/reboot-ffgt /lib/gluon/config-mode/reboot ||:
 fi
 
-BOARD="$(cat /tmp/sysinfo/board_name)"
-if [ "${BOARD}" = "dlink,dap-x1860-a1" ]; then
-  RSSID_DEV="$(uci get system.rssid_wlan1.dev 2>&1)"
-  if [ "${RSSID_DEV}" = "wlan1" ]; then
-    uci set system.rssid_wlan1.dev='mesh1' ||:
-    uci commit system >/dev/null 2>&1 ||:
-  fi
-fi
-
 COMMIT_WIRELESS=0
 EOS_CHECK=$(uci get wireless.dep_radio0.ssid >/dev/null 2>&1; echo $?)
 if [ ${EOS_CHECK} -eq 0 ]; then
