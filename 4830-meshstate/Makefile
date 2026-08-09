@@ -5,7 +5,7 @@ PKG_VERSION:=1
 PKG_RELEASE:=1
 PKG_LICENSE:=MIT
 
-include ../gluon.mk
+include $(INCLUDE_DIR)/package.mk
 
 define Package/4830-meshstate
   TITLE:=Fetch and verify signed mesh state
