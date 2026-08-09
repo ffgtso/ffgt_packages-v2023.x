@@ -6,7 +6,7 @@ PKG_RELEASE:=1
 PKG_LICENSE:=MIT
 PKG_INSTALL:=1
 
-include $(INCLUDE_DIR)/package.mk
+include $(TOPDIR)/../package/gluon.mk
 include $(INCLUDE_DIR)/cmake.mk
 
 define Package/4830-meshstate
