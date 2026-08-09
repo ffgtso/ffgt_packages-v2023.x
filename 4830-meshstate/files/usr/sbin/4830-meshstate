@@ -1,0 +1,242 @@
+#!/usr/bin/lua
+
+-- SPDX-License-Identifier: MIT
+
+local uci = require('simple-uci').cursor()
+
+local PRIMARY_MAC = '/lib/gluon/core/sysconfig/primary_mac'
+local BASE_URL = 'http://setup.ipv6.4830.org/meshstate.php?node='
+local STATE_DIR = '/tmp/meshstate'
+local CURRENT_FILE = STATE_DIR .. '/current.cfg'
+local MAX_DOWNLOAD_SIZE = 1024 * 1024
+local MAX_SIGNATURES = 32
+
+local function shell_quote(s)
+  return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+local function log(message)
+  -- Prefix the message so it can never be parsed as an option by logger.
+  os.execute('logger -t 4830-meshstate ' .. shell_quote('meshstate: ' .. message))
+end
+
+local function fail(message, cleanup)
+  if cleanup then
+    for _, path in ipairs(cleanup) do
+      if path then
+        os.remove(path)
+      end
+    end
+  end
+
+  log(message)
+  os.exit(1)
+end
+
+local function read_line(path)
+  local f = io.open(path, 'r')
+  if not f then
+    return nil
+  end
+
+  local value = f:read('*l')
+  f:close()
+
+  return value
+end
+
+local function process_id()
+  local f = io.open('/proc/self/stat', 'r')
+  if f then
+    local stat = f:read('*l')
+    f:close()
+
+    local pid = stat and stat:match('^(%d+)')
+    if pid then
+      return pid
+    end
+  end
+
+  return tostring(os.time())
+end
+
+local function valid_hex(value, length)
+  return type(value) == 'string'
+    and #value == length
+    and value:match('^[0-9a-fA-F]+$') ~= nil
+end
+
+local function current_pubkeys()
+  local branch = uci:get('autoupdater', 'settings', 'branch')
+  if not branch or branch == '' then
+    return nil, nil, 'no autoupdater branch is selected'
+  end
+
+  local pubkeys = {}
+  for _, key in ipairs(uci:get_list('autoupdater', branch, 'pubkey')) do
+    if valid_hex(key, 64) then
+      pubkeys[#pubkeys + 1] = key
+    end
+  end
+
+  if #pubkeys == 0 then
+    return nil, branch, 'selected autoupdater branch has no usable public keys'
+  end
+
+  return pubkeys, branch
+end
+
+local function parse_signed_text(data)
+  -- Gluon's manifest parser hashes every line before "---" and appends a LF
+  -- to each line. Reject CR and NUL so there is no ambiguity between the Lua
+  -- parser and the verifier input.
+  if data:find('\r', 1, true) then
+    return nil, nil, 'CR characters are not allowed; use LF line endings'
+  end
+
+  if data:find('\0', 1, true) then
+    return nil, nil, 'NUL characters are not allowed'
+  end
+
+  local payload = {}
+  local signatures = {}
+  local separator_found = false
+
+  -- Appending one LF makes the final unterminated signature line parseable.
+  -- If the response already ends in LF this only creates an empty signature
+  -- line, which is ignored below.
+  for line in (data .. '\n'):gmatch('(.-)\n') do
+    if not separator_found then
+      if line == '---' then
+        separator_found = true
+      else
+        payload[#payload + 1] = line
+      end
+    elseif line ~= '' then
+      if not valid_hex(line, 128) then
+        return nil, nil, 'invalid data in signature area'
+      end
+
+      signatures[#signatures + 1] = line
+      if #signatures > MAX_SIGNATURES then
+        return nil, nil, 'too many signatures'
+      end
+    end
+  end
+
+  if not separator_found then
+    return nil, nil, 'signature separator is missing'
+  end
+
+  if #signatures == 0 then
+    return nil, nil, 'no signatures found'
+  end
+
+  -- This is exactly the byte sequence Gluon's manifest parser hashes:
+  -- each pre-separator line followed by one LF.
+  local payload_data = #payload > 0 and (table.concat(payload, '\n') .. '\n') or ''
+  return payload_data, signatures
+end
+
+if os.execute('mkdir -p ' .. shell_quote(STATE_DIR)) ~= 0 then
+  fail('unable to create ' .. STATE_DIR)
+end
+
+local mac = read_line(PRIMARY_MAC)
+if not mac or not mac:match('^[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]$') then
+  fail('primary_mac is missing or malformed')
+end
+
+local pubkeys, branch, key_error = current_pubkeys()
+if not pubkeys then
+  fail(key_error)
+end
+
+local suffix = process_id()
+local download_file = STATE_DIR .. '/meshstate.download.' .. suffix
+local payload_file = STATE_DIR .. '/meshstate.payload.' .. suffix
+local cleanup = { download_file, payload_file }
+local url = BASE_URL .. mac
+
+local fetch_command = table.concat({
+  '/bin/uclient-fetch',
+  '-q',
+  '-T', '30',
+  '-O', shell_quote(download_file),
+  shell_quote(url),
+}, ' ')
+
+if os.execute(fetch_command) ~= 0 then
+  fail('download failed', cleanup)
+end
+
+local f = io.open(download_file, 'rb')
+if not f then
+  fail('unable to read downloaded file', cleanup)
+end
+
+local size = f:seek('end')
+if not size then
+  f:close()
+  fail('unable to determine download size', cleanup)
+end
+
+if size > MAX_DOWNLOAD_SIZE then
+  f:close()
+  fail('download exceeds size limit', cleanup)
+end
+
+f:seek('set', 0)
+local data = f:read('*a')
+f:close()
+
+if not data then
+  fail('unable to read downloaded data', cleanup)
+end
+
+local payload, signatures, parse_error = parse_signed_text(data)
+if not payload then
+  fail(parse_error, cleanup)
+end
+
+local out = io.open(payload_file, 'wb')
+if not out then
+  fail('unable to create temporary payload file', cleanup)
+end
+
+if not out:write(payload) then
+  out:close()
+  fail('unable to write temporary payload file', cleanup)
+end
+out:close()
+
+local verify = { '/usr/bin/ecdsautil', 'verify' }
+for _, signature in ipairs(signatures) do
+  verify[#verify + 1] = '-s'
+  verify[#verify + 1] = signature
+end
+for _, key in ipairs(pubkeys) do
+  verify[#verify + 1] = '-p'
+  verify[#verify + 1] = key
+end
+verify[#verify + 1] = shell_quote(payload_file)
+
+-- No -n option is supplied: ecdsautil therefore performs 1-of-m verification.
+if os.execute(table.concat(verify, ' ')) ~= 0 then
+  fail('signature verification failed for autoupdater branch ' .. branch, cleanup)
+end
+
+-- The download is no longer needed. Rename the verified payload atomically,
+-- so a failed update can never truncate an existing current.cfg.
+os.remove(download_file)
+
+if not os.rename(payload_file, CURRENT_FILE) then
+  fail('unable to install verified payload', { payload_file })
+end
+
+log(string.format(
+  'installed verified meshstate for branch %s (%d signature(s), %d key(s))',
+  branch,
+  #signatures,
+  #pubkeys
+))

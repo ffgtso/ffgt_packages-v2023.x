@@ -1,0 +1,20 @@
+#!/usr/bin/lua
+
+-- SPDX-License-Identifier: MIT
+-- Spread requests across the hour. The static micron file is a fallback for
+-- runtime package installation; normal Gluon upgrades replace minute 0 here.
+
+local minute = 0
+local urandom = io.open('/dev/urandom', 'rb')
+if urandom then
+  local byte = urandom:read(1)
+  urandom:close()
+
+  if byte and #byte == 1 then
+    minute = byte:byte() % 60
+  end
+end
+
+local f = assert(io.open('/usr/lib/micron.d/4830-meshstate', 'w'))
+f:write(string.format('%d * * * * /usr/sbin/4830-meshstate\n', minute))
+f:close()
