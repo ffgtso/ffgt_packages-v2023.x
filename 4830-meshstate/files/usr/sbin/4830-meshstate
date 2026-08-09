@@ -210,7 +210,7 @@ if not out:write(payload) then
 end
 out:close()
 
-local verify = { '/usr/bin/ecdsautil', 'verify' }
+local verify = { '/usr/lib/4830-meshstate/4830-meshstate-verify' }
 for _, signature in ipairs(signatures) do
   verify[#verify + 1] = '-s'
   verify[#verify + 1] = signature
@@ -221,7 +221,7 @@ for _, key in ipairs(pubkeys) do
 end
 verify[#verify + 1] = shell_quote(payload_file)
 
--- No -n option is supplied: ecdsautil therefore performs 1-of-m verification.
+-- The private verifier performs 1-of-m verification using libecdsautil.
 if os.execute(table.concat(verify, ' ')) ~= 0 then
   fail('signature verification failed for autoupdater branch ' .. branch, cleanup)
 end

@@ -17,9 +17,24 @@ The response format is manifest-like:
     [more signatures ...]
 
 The package reads the currently selected autoupdater branch from UCI and uses
-all `pubkey` entries of that branch. `ecdsautil verify` is deliberately called
-without `-n`, so one matching signature/key pair is sufficient; the firmware
-branch's `good_signatures` value is not used.
+all `pubkey` entries of that branch. One matching signature/key pair is
+sufficient; the firmware branch's `good_signatures` value is deliberately not
+used.
+
+Signature verification does not require the `ecdsautils` command-line package.
+The main program remains Lua; because `libecdsautil` exposes a C API rather than
+a Lua binding, it calls a small private verifier installed as
+
+    /usr/lib/4830-meshstate/4830-meshstate-verify
+
+which links directly against the already used `libecdsautil`. The library's
+pkg-config metadata pulls in its `libuecc` dependency as required by the public
+API.
+
+For compatibility with Gluon 2021.1.2, the private verifier additionally rejects
+ECDSA signatures with `r == 0` or `s == 0` before passing them to
+`libecdsautil`. This compensates for CVE-2022-24884 in the older library version
+shipped by that Gluon release.
 
 Only after successful verification is the payload (everything before `---`)
 atomically renamed to:
