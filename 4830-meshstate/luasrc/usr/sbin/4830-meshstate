@@ -240,3 +240,5 @@ log(string.format(
   #signatures,
   #pubkeys
 ))
+
+os.execute('/usr/sbin/do.meshstate')

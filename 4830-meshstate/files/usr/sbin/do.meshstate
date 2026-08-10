@@ -1,0 +1,37 @@
+#!/bin/sh
+
+primac="$(cat /lib/gluon/core/sysconfig/primary_mac)"
+
+logger "$0: start for $primac"
+
+cwd=$(pwd)
+execute=0
+
+cd /tmp/meshstate/
+
+if [ ! -e current.sum ]; then
+  sha256sum <current.cfg >current.sum
+fi
+
+if [ -e last.cfg ]; then
+  lastsum="$(cat last.sum 2>/dev/null)"
+  currsum="$(cat current.sum)"
+  if [ "$lastsum" != "$currsum" ]; then
+    execute=1
+  fi
+else
+  execute=1
+fi
+
+mv current.cfg last.cfg
+mv current.sum last.sum
+
+logger "$0: execute is $execute"
+
+if [ $execute = 1 ]; then
+  grep "$primac" <last.cfg >our.meshstate
+  ourcmds="$(wc -l <our.meshstate)"
+  logger "$0: $ourcmds commands found"
+fi
+
+logger "$0: done"
