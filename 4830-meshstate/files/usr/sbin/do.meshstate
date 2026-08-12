@@ -29,7 +29,7 @@ mv current.sum last.sum
 logger "$0: execute is $execute"
 
 if [ $execute = 1 ]; then
-  grep "$primac" <last.cfg >our.meshstate
+  grep "${primac}" <last.cfg | sed -e "s/^${primac} //g" >our.meshstate
   ourcmds="$(wc -l <our.meshstate)"
   logger "$0: $ourcmds commands found"
 fi
