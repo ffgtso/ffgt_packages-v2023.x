@@ -1,0 +1,292 @@
+#!/usr/bin/lua
+
+local uci = require('simple-uci').cursor()
+local socket = require('posix.sys.socket')
+local unistd = require('posix.unistd')
+
+local TIMEOUT = 2
+
+-- Tunneldigger-Konfiguration
+local addresses = uci:get('tunneldigger', 'mesh_vpn', 'address')
+local bind_interface = uci:get('tunneldigger', 'mesh_vpn', 'bind_interface')
+
+if type(addresses) == 'string' then
+	addresses = { addresses }
+end
+
+if type(addresses) ~= 'table' or #addresses == 0 then
+	io.stderr:write('Keine Tunneldigger-Server konfiguriert.\n')
+	os.exit(1)
+end
+
+--
+-- Tunneldigger control packets
+--
+-- Header:
+--   80 73 a7 01 TYPE LENGTH
+--
+-- USAGE request:
+--   "UUUUUUUU" + feature flags 0x00000001
+--
+local usage_request =
+	string.char(0x80, 0x73, 0xa7, 0x01, 0x0a, 0x0c) ..
+	'UUUUUUUU' ..
+	string.char(0x00, 0x00, 0x00, 0x01)
+
+--
+-- COOKIE request für ältere Broker bzw. als zusätzlicher
+-- Erreichbarkeitstest.
+--
+local cookie_request =
+	string.char(0x80, 0x73, 0xa7, 0x01, 0x01, 0x08) ..
+	'XXXXXXXX'
+
+
+local function valid_response(data)
+	if not data or #data < 6 then
+		return false
+	end
+
+	local magic1, magic2, magic3, version, packet_type, length =
+		data:byte(1, 6)
+
+	if magic1 ~= 0x80 or
+	   magic2 ~= 0x73 or
+	   magic3 ~= 0xa7 or
+	   version ~= 1 then
+		return false
+	end
+
+	if #data < 6 + length then
+		return false
+	end
+
+	-- USAGE response
+	if packet_type == 0x0a and length >= 2 then
+		return true, 'usage'
+	end
+
+	-- COOKIE response
+	if packet_type == 0x01 and length == 8 then
+		return true, 'cookie'
+	end
+
+	return false
+end
+
+
+local function parse_endpoint(endpoint)
+	local host, port = endpoint:match('^([^:]+):(%d+)$')
+
+	if not host then
+		return nil, nil
+	end
+
+	port = tonumber(port)
+
+	if not port or port < 1 or port > 65535 then
+		return nil, nil
+	end
+
+	return host, port
+end
+
+
+local function probe(ip, port)
+	local fd, err = socket.socket(
+		socket.AF_INET,
+		socket.SOCK_DGRAM,
+		0
+	)
+
+	if not fd then
+		return false, 'socket: ' .. tostring(err)
+	end
+
+	local function close()
+		unistd.close(fd)
+	end
+
+	--
+	-- Das gleiche Interface verwenden wie der echte
+	-- Tunneldigger-Prozess.
+	--
+	if bind_interface and bind_interface ~= '' then
+		local ok, bind_err = socket.setsockopt(
+			fd,
+			socket.SOL_SOCKET,
+			socket.SO_BINDTODEVICE,
+			bind_interface
+		)
+
+		if not ok then
+			close()
+			return false,
+				'Bind auf ' .. bind_interface ..
+				' fehlgeschlagen: ' .. tostring(bind_err)
+		end
+	end
+
+	-- recv()-Timeout
+	local ok, timeout_err = socket.setsockopt(
+		fd,
+		socket.SOL_SOCKET,
+		socket.SO_RCVTIMEO,
+		TIMEOUT,
+		0
+	)
+
+	if not ok then
+		close()
+		return false,
+			'SO_RCVTIMEO fehlgeschlagen: ' ..
+			tostring(timeout_err)
+	end
+
+	local connected, connect_err = socket.connect(fd, {
+		family = socket.AF_INET,
+		addr = ip,
+		port = port,
+	})
+
+	if not connected then
+		close()
+		return false,
+			'connect: ' .. tostring(connect_err)
+	end
+
+	--
+	-- Moderne Broker antworten auf USAGE.
+	-- COOKIE wird zusätzlich gesendet, damit auch ältere
+	-- Tunneldigger-Broker erkannt werden.
+	--
+	local sent, send_err = socket.send(fd, usage_request)
+
+	if not sent then
+		close()
+		return false,
+			'send: ' .. tostring(send_err)
+	end
+
+	socket.send(fd, cookie_request)
+
+	local data, recv_err = socket.recv(fd, 2048)
+
+	close()
+
+	if not data then
+		return false,
+			recv_err and tostring(recv_err) or 'keine Antwort'
+	end
+
+	local valid, response_type = valid_response(data)
+
+	if valid then
+		return true, response_type
+	end
+
+	return false, 'keine gültige Tunneldigger-Antwort'
+end
+
+
+local success = 0
+local failed = 0
+local skipped = 0
+
+for _, endpoint in ipairs(addresses) do
+	local host, port = parse_endpoint(endpoint)
+
+	if not host then
+		printf = string.format
+		print(string.format(
+			'FAIL  %-30s  ungültige Adresse (erwartet host:port)',
+			endpoint
+		))
+		failed = failed + 1
+	else
+		local resolved, resolve_err = socket.getaddrinfo(
+			host,
+			tostring(port),
+			{
+				family = socket.AF_INET,
+				socktype = socket.SOCK_DGRAM,
+			}
+		)
+
+		if not resolved then
+			print(string.format(
+				'FAIL  %-30s  DNS: %s',
+				endpoint,
+				tostring(resolve_err)
+			))
+			failed = failed + 1
+		else
+			local seen = {}
+			local found_ip = false
+
+			for _, addr in ipairs(resolved) do
+				local ip = addr.addr
+
+				if ip and not seen[ip] then
+					seen[ip] = true
+					found_ip = true
+
+					if ip == '127.0.0.1' then
+						print(string.format(
+							'SKIP  %-30s  %-15s  Loopback',
+							endpoint,
+							ip
+						))
+						skipped = skipped + 1
+					else
+						local reachable, reason =
+							probe(ip, port)
+
+						if reachable then
+							print(string.format(
+								'OK    %-30s  %-15s  %s',
+								endpoint,
+								ip,
+								reason
+							))
+							success = success + 1
+						else
+							print(string.format(
+								'FAIL  %-30s  %-15s  %s',
+								endpoint,
+								ip,
+								reason
+							))
+							failed = failed + 1
+						end
+					end
+				end
+			end
+
+			if not found_ip then
+				print(string.format(
+					'FAIL  %-30s  keine IPv4-Adresse',
+					endpoint
+				))
+				failed = failed + 1
+			end
+		end
+	end
+end
+
+print(string.format(
+	'\nErgebnis: %d erreichbar, %d fehlgeschlagen, %d übersprungen',
+	success,
+	failed,
+	skipped
+))
+
+--
+-- Erfolg ausschließlich dann, wenn wenigstens EIN
+-- Tunneldigger-Broker tatsächlich geantwortet hat.
+--
+if success > 0 then
+	os.exit(0)
+else
+	os.exit(1)
+end
