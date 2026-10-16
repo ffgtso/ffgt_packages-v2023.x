@@ -1,134 +1,83 @@
 #!/bin/sh
-# Query a central server for the target mesh and whether moving
-# to that mesh is open right now. If so, if target mesh differs
-# from current one, execute a switch followed by a reboot.
-
-locode="$(/sbin/uci get gluon-node-info.@location[0].locode 2>/dev/null)"
-if [ "x${locode}" == "x" ]; then
- gluondomain="$(/sbin/uci get gluon.core.domain)"
- if [ "${gluondomain}" != "" ]; then
-  logger "$0: locode unset, migration foobar? Setting to ${gluondomain} ..."
-  /sbin/uci set gluon-node-info.@location[0].locode="${gluondomain}" ||:
-  /sbin/uci commit gluon-node-info
-  locode="${gluondomain}"
- else
-  logger "$0: locode unset, gluon.core.domain unset: bailing out."
-  exit 0
-  fi
+export LC_ALL=C
+q() { /sbin/uci -q "$@"; }
+g() { q get "gluon-node-info.@location[0].$1"; }
+s() { [ "$(g "$1")" = "$2" ] || { q set "gluon-node-info.@location[0].$1=$2" && h=1; }; }
+e() { if g "$1" >/dev/null; then q delete "gluon-node-info.@location[0].$1" && h=1; fi; }
+save() { [ -z "$h" ] || { q commit gluon-node-info && h=; }; }
+log() { logger -t mesh-switch "$*"; }
+num() { case "$1" in ''|*[!0-9]*) return 1;; esac; [ "${#1}" -le 10 ] && [ "$1" -le 2147483647 ]; }
+domain() { case "$1" in ''|*[!a-zA-Z0-9_-]*) return 1;; esac; [ -f "/lib/gluon/domains/$1.json" ]; }
+branch() { case "$1" in ''|*[!a-zA-Z0-9_-]*) return 1;; esac; [ "$(q get "autoupdater.$1")" = branch ]; }
+[ "$(awk '{print int($1)}' /proc/uptime)" -ge 900 ] || exit 0
+mkdir /tmp/mesh-switch.lock 2>/dev/null || exit 0
+trap 'rm -rf /tmp/mesh-switch.lock' 0
+trap 'exit 1' HUP INT TERM
+f=/tmp/mesh-switch.lock/reply
+c=$(g locode)
+if [ -z "$c" ]; then
+ c=$(q get gluon.core.domain)
+ domain "$c" || exit 1
+ s locode "$c" && save || exit 1
+else domain "$c" || exit 1; fi
+if [ "$(g tgtloc)" = "$c" ]; then
+ e tgtloc && e switchtime && save || exit 1
 fi
-
-uptime=$(awk </proc/uptime '{printf("%.0f", $1);}')
-if [ ${uptime} -lt 900 ]; then
-  logger "$0: uptime too low, bailing out"
-  exit 0
+m=$(cat /lib/gluon/core/sysconfig/primary_mac)
+x=${m##*:}
+case "$x" in [0-9a-fA-F][0-9a-fA-F]) sleep "$(printf %d "0x$x")";; *) exit 1;; esac
+b=$(q get autoupdater.settings.branch)
+p=$(awk -v a="$(g latitude)" -v o="$(g longitude)" 'BEGIN {
+ r="^[+-]?[0-9]+([.][0-9]+)?$"
+ if(a ~ r && o ~ r && a>=-90 && a<=90 && o>=-180 && o<=180)
+  printf "lat=%.7f&lon=%.7f",a,o
+}')
+if [ -n "$p" ] && branch "$b"; then
+ url="geoloc.php?get=newmesh&node=$m&$p&loc=$c&aub=$b"
+ if wget --timeout=2 -6 -q -O "$f" "http://setup.ipv6.4830.org/$url" ||
+    wget --timeout=2 -4 -q -O "$f" "http://setup.ipv4.4830.org/$url"; then
+  if awk '
+   /^(DST|FRM|AUB):/ {
+    k=substr($1,1,3)
+    if(seen[k]++ || NF>2 || $1!=k ":") bad=1
+    v[k]=$2; next
+   }
+   END {
+    if(bad || !seen["DST"] || v["DST"]=="") exit 1
+    print v["DST"]; print v["FRM"]; print v["AUB"]
+   }' "$f" > "$f.parsed"; then
+   { read -r d; read -r u; read -r a; } < "$f.parsed"
+   [ -n "$a" ] || a=$b
+   if domain "$d" && branch "$a" && { [ -z "$u" ] || num "$u"; }; then
+    t=$d
+    if [ "$d" = "$c" ]; then t=; u=; fi
+    if [ "$(g tgtloc)" != "$t" ] || [ "$(g switchtime)" != "$u" ]; then
+     if [ -n "$t" ]; then s tgtloc "$t" || exit 1
+     else e tgtloc || exit 1; fi
+     if [ -n "$u" ]; then s switchtime "$u" || exit 1
+     else e switchtime || exit 1; fi
+     save || exit 1
+    fi
+    if [ "$a" != "$b" ]; then
+     q set "autoupdater.settings.branch=$a" && q commit autoupdater || exit 1
+    fi
+   else log 'invalid values'; fi
+  else log 'invalid reply'; fi
+ else log 'query failed'; fi
 fi
-
-# We're now supposed to run ...
-LASTOCTET=$(cut -d : -f6 /lib/gluon/core/sysconfig/primary_mac)
-DELAYSECS=$(printf %d 0x${LASTOCTET})
-# ... but delay hammering the server pseudo-randomly
-sleep ${DELAYSECS}
-
-branch=$(uci get autoupdater.settings.branch)
-AUBRNCH="${branch}"
-
-# Empty string == unset in UCI
-switchtime="$(/sbin/uci get gluon-node-info.@location[0].switchtime 2>/dev/null)"
-# Ensure these values are numbers
-curlat="$(/sbin/uci get gluon-node-info.@location[0].latitude 2>/dev/null || echo 0.0)"
-curlon="$(/sbin/uci get gluon-node-info.@location[0].longitude 2>/dev/null || echo 0.0)"
-# Sanitize
-#curlat="$(echo "${curlat}" | sed -e 's/ //g')"
-#curlon="$(echo "${curlon}" | sed -e 's/ //g')"
-curlat="$(printf "%.7f" "${curlat}")"
-curlon="$(printf "%.7f" "${curlon}")"
-# If at least lat or lon are set and plausible, let's try
-if [ $(printf "%.0f" "${curlat}") != 0 -o $(printf "%.0f" "${curlon}") != 0 ]; then
- mac="$(cat /lib/gluon/core/sysconfig/primary_mac)"
- # Clear previous data
- touch /tmp/getmesh.out && rm /tmp/getmesh.out
- # Query for where we should be according to our coordinates and if a
- # starttime is set to actually switch to that mesh
- querystring="$(echo "geoloc.php?get=newmesh&node=${mac}&lat=${curlat}&lon=${curlon}&loc=${locode}&aub=${branch}" | sed -e 's/ //g')"
- wget --timeout=2 -6 -q -O /tmp/getmesh.out "http://setup.ipv6.4830.org/${querystring}"
- if [ $? -ne 0 ]; then
-   wget --timeout=2 -4 -q -O /tmp/getmesh.out "http://setup.ipv4.4830.org/${querystring}"
- fi
- if [ -e /tmp/getmesh.out ]; then
-  DSTMESH="$(awk </tmp/getmesh.out '/^DST:/ {printf("%s", $2);}')"
-  STRTIME="$(awk </tmp/getmesh.out '/^FRM:/ {printf("%s", $2);}')"
-  AUBRNCH="$(awk </tmp/getmesh.out '/^AUB:/ {printf("%s", $2);}')"
-  if [ "X${AUBRNCH}" = "X" ]; then
-   AUBRNCH="${branch}"
-  fi
-
-  # If no STaRTTIME returned, delete a stored switchtime in UCI; otherwise,
-  # if stored switchtime differs from STaRTTIME, set this as new switchtime.
-  if [ "X${STRTIME}" = "X" ]; then
-   if [ "X${switchtime}" != "X" ]; then
-     /sbin/uci delete gluon-node-info.@location[0].switchtime ||:
-     /sbin/uci commit gluon-node-info
-   fi
-  else
-   if [ "${switchtime}" != "${STRTIME}" ]; then
-    /sbin/uci set gluon-node-info.@location[0].switchtime="${STRTIME}"
-    /sbin/uci commit gluon-node-info
-   fi
-  fi
-
-  # If DeSTinationMESH differs from current one, save as t(ar)g(e)tloc(ode)
-  # in UCI if it differs from previously stored one (reduce uci commits as
-  # much as possible)
-  if [ "${DSTMESH}" != "${locode}" ]; then
-   tgtloc="$(/sbin/uci get gluon-node-info.@location[0].tgtloc 2>/dev/null)"
-   if [ "${DSTMESH}" != "${tgtloc}" ]; then
-    /sbin/uci set gluon-node-info.@location[0].tgtloc="${DSTMESH}"
-    /sbin/uci commit gluon-node-info
-   fi
-  fi
- else
-  logger "$0: call for get=newmesh failed on setup.4830.org ..."
- fi
-fi
-
-# Change Autoupdater branch if setup server says so
-if [ "${AUBRNCH}" != "${branch}" ]; then
-  uci set autoupdater.settings.branch="${AUBRNCH}"
-  uci commit autoupdater
-fi
-
-# Now, check if there's a switchtime set and a target locode as well
-# and if it's time to switch
-now="$(date +%s)"
-switchtime="$(/sbin/uci get gluon-node-info.@location[0].switchtime 2>/dev/null)"
-tgtloc="$(/sbin/uci get gluon-node-info.@location[0].tgtloc 2>/dev/null)"
-
-if [ "${switchtime}" != "" ]; then
- if [ "${tgtloc}" != "" ]; then
-  if [ ${now} -gt ${switchtime} ]; then
-   logger "$0: switchtime reached, switching to mesh ${tgtloc} in a second."
-   sleep 1
-   # Set 4830.org's locode, as gluon-switch-domain only sets gluon.core.domain,
-   # then delete tgtloc and switchtime from UCI, as we will execute the switch
-   # now.
-   /sbin/uci set gluon-node-info.@location[0].locode="${tgtloc}"
-   /sbin/uci delete gluon-node-info.@location[0].tgtloc ||:
-   /sbin/uci delete gluon-node-info.@location[0].switchtime ||:
-   /sbin/uci commit gluon-node-info
-   sync
-   sleep 2
-   gluon-switch-domain "${tgtloc}"
-   # System should now reboot ...
-  else
-   logger "$0: switchtime to switch to mesh ${tgtloc} not reached, exiting."
-  fi
- else
-  logger "$0: switchtime set but no target mesh defined, that should not happen; exiting ..."
- fi
-else
- if [ "${tgtloc}" != "" -a "${tgtloc}" != "${locode}" ]; then
-  logger "$0: switch from ${locode} to ${tgtloc} neccessary, but no switchtime set."
- else
-  logger "$0: no switchtime set, nothing to do."
+t=$(g tgtloc)
+u=$(g switchtime)
+if [ -n "$u" ] && num "$u" && domain "$t" && [ "$t" != "$c" ]; then
+ if [ "$(date +%s)" -ge "$u" ]; then
+  log "switching $c -> $t"
+  l=$(g locode)
+  s locode "$t" && save || exit 1
+  sync
+  gluon-switch-domain "$t" || {
+   s locode "$l" || exit 1
+   save || exit 1
+   log 'switch failed'
+   exit 1
+  }
  fi
 fi

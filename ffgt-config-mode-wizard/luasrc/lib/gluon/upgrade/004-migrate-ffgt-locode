@@ -1,0 +1,36 @@
+#!/usr/bin/lua
+local fs = require 'nixio.fs'
+local uci = require('simple-uci').cursor()
+local package_name = 'gluon-node-info'
+local location = uci:get_first(package_name, 'location')
+if not location then return end
+local locode = uci:get(package_name, location, 'locode')
+local siteselect = uci:get(package_name, location, 'siteselect')
+local location_changed = false
+
+if locode == nil and siteselect ~= nil then
+    locode = siteselect
+    uci:set(package_name, location, 'locode', locode)
+    location_changed = true
+end
+
+if fs.stat('/lib/gluon/domains', 'type') == 'dir' and locode ~= nil then
+    if locode:match('^[%w_-]+$') and
+       fs.stat('/lib/gluon/domains/' .. locode .. '.json', 'type') == 'reg' then
+        if uci:get('gluon', 'core', 'domain') ~= locode then
+            io.stderr:write(string.format('Setting FFGT domain to %s.\n', locode))
+            uci:set('gluon', 'core', 'domain', locode)
+            uci:commit('gluon')
+        end
+    else
+        io.stderr:write(string.format('Ignoring invalid FFGT locode %q.\n', locode))
+    end
+end
+
+if siteselect ~= nil then
+    uci:delete(package_name, location, 'siteselect')
+    location_changed = true
+end
+if location_changed then
+    uci:commit(package_name)
+end
