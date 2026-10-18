@@ -1,5 +1,11 @@
 #!/usr/bin/lua
-local fs = require 'nixio.fs'
+local has_fs, fs = pcall(require, 'nixio.fs')
+local util = not has_fs and require 'gluon.util'
+local function is_type(path, kind)
+    if has_fs then return fs.stat(path, 'type') == kind end
+    local flag = kind == 'dir' and 'd' or 'f'
+    return util.exec("[ -" .. flag .. " '" .. path .. "' ] && printf 1") == '1'
+end
 local uci = require('simple-uci').cursor()
 local package_name = 'gluon-node-info'
 local location = uci:get_first(package_name, 'location')
@@ -14,9 +20,9 @@ if locode == nil and siteselect ~= nil then
     location_changed = true
 end
 
-if fs.stat('/lib/gluon/domains', 'type') == 'dir' and locode ~= nil then
-    if locode:match('^[%w_-]+$') and
-       fs.stat('/lib/gluon/domains/' .. locode .. '.json', 'type') == 'reg' then
+if is_type('/lib/gluon/domains', 'dir') and locode ~= nil then
+    if locode:match('^[a-zA-Z0-9_-]+$') and
+       is_type('/lib/gluon/domains/' .. locode .. '.json', 'reg') then
         if uci:get('gluon', 'core', 'domain') ~= locode then
             io.stderr:write(string.format('Setting FFGT domain to %s.\n', locode))
             uci:set('gluon', 'core', 'domain', locode)
@@ -30,6 +36,7 @@ end
 if siteselect ~= nil then
     uci:delete(package_name, location, 'siteselect')
     location_changed = true
+    io.stderr:write(string.format('Removed obsolete siteselect option.\n'))
 end
 if location_changed then
     uci:commit(package_name)
