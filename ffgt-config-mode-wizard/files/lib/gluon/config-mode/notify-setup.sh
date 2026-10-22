@@ -35,8 +35,10 @@ if [ ! -e /tmp/run/setup-data-sent -o $# -gt 0 ]; then
     localip="`/sbin/ifconfig br-wan | /usr/bin/awk '/inet addr:/ {inet=$2; gsub("addr:", "", inet); printf("%s", inet);}'`"
    fi
   fi
-  hostname="`/sbin/uci get system.@system[0].hostname`"
-  /bin/wget -q -O /dev/null "http://setup.${IPVXPREFIX}4830.org/register.php?name=$hostname&mac=$mac&ip=$localip" && /bin/touch /tmp/run/setup-data-sent
+  hostname="$(/sbin/uci get system.@system[0].hostname|sed -e 's/ /%20/g')"
+  boardname="$(sed -e 's/ /%20/g' </tmp/sysinfo/board_name 2>/dev/null)"
+  firmware="$(sed -e 's/ /%20/g' </lib/gluon/release 2>/dev/null)"
+  /bin/wget -q -O /dev/null "http://setup.${IPVXPREFIX}4830.org/register.php?name=$hostname&mac=$mac&ip=$localip&dev=$boardname&fw=$firmware" && /bin/touch /tmp/run/setup-data-sent
  fi
 fi
 
