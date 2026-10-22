@@ -75,6 +75,17 @@ if [ "$(uci get autoupdater.stable.mirror | grep firmware.*4830.org >/dev/null ;
    echo "Started WiFi-based location gathering in the backgroud due to missing coordinates." | tee -a /root/multidomain-migration.log
    ((sleep 150 ; /lib/gluon/ffgt-geolocate/geolocate-lite.sh force ; echo >>/root/multidomain-migration.log "Geolocation results:" ; cat /tmp/geoloc.out >>/root/multidomain-migration.log) &)
   fi
+  aabranch="$(uci get autoupdater.settings.branch)"
+  if [ "${aabranch}" = "mns" -o "${aabranch}" = "wtb" ]; then
+   uci set autoupdater.settings.branch='stable23'
+   uci commit autoupdater
+   echo "Moved node to autoupdate branch $(uci get autoupdater.settings.branch) from ${aabranch}." | tee -a /root/multidomain-migration.log
+  fi
+  if [ "${aabranch}" = "stable23" ]; then
+   uci set autoupdater.settings.branch='stable'
+   uci commit autoupdater
+   echo "Moved node to autoupdate branch $(uci get autoupdater.settings.branch) from ${aabranch}." | tee -a /root/multidomain-migration.log
+  fi
   logger "4830.org FW detected! Move on, nothing to see here!"
   echo "4830.org FW detected! Move on, nothing to see here!" | tee -a /root/multidomain-migration.log
   rm ${LOCKFILE}
@@ -175,13 +186,6 @@ else
  fi
 
  echo "Moving alien setup from ${domain} ..." | tee -a /root/multidomain-migration.log
-fi
-
-aabranch="$(uci get autoupdater.settings.branch)"
-if [ "${aabranch}" = "stable23" -o "${aabranch}" = "mns" -o "${aabranch}" = "wtb" ]; then
- uci set autoupdater.settings.branch='stable'
- uci commit autoupdater
- echo "Moved node to autoupdate branch $(uci get autoupdater.settings.branch) from ${aabranch}." | tee -a /root/multidomain-migration.log
 fi
 
 if [ ! -e /lib/gluon/domains/${domain}.json ]; then
