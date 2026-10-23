@@ -59,6 +59,14 @@ if [ "${ssid_changer_active}" != "1" ]; then
   uci commit ssid-changer ||:
 fi
 
+if [ -e /lib/gluon/config-mode/controller/admin/hostname-ffgt.lua ]; then
+  mv /lib/gluon/config-mode/controller/admin/hostname-ffgt.lua /lib/gluon/config-mode/controller/admin/hostname-ffgt.lua ||:
+fi
+
+if [ -e /lib/gluon/config-mode/model/admin/hostname-ffgt.lua ]; then
+  mv /lib/gluon/config-mode/model/admin/hostname-ffgt.lua /lib/gluon/config-mode/model/admin/hostname.lua ||:
+fi
+
 COMMIT_WIRELESS=0
 EOS_CHECK=$(uci get wireless.dep_radio0.ssid >/dev/null 2>&1; echo $?)
 if [ ${EOS_CHECK} -eq 0 ]; then
