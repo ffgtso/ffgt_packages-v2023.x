@@ -82,13 +82,10 @@ msgstr ""
 msgid "Based on the coordinates configured, this node will be part of"
 msgstr ""
 
-msgid "If you want the location of your node to be displayed on the map, please tick the checkbox below."
-msgstr ""
-
 msgid "To change, go to Advanced settings/Geolocation."
 msgstr ""
 
-msgid 'LOCATION NOT SET. Please go to %s.'
+msgid "LOCATION NOT SET. Please go to %s."
 msgstr ""
 
 msgid "The recorded email address looks valid:"
@@ -97,7 +94,7 @@ msgstr ""
 msgid "To change it, go to %s."
 msgstr ""
 
-msgid 'CONTACT NOT SET. Please go to %s.'
+msgid "CONTACT NOT SET. Please go to %s."
 msgstr ""
 
 msgid "Please enter a valid(!) email address, so we can contact you if something needs to be done about your node."
@@ -144,7 +141,7 @@ msgstr "Please do not touch this setting unless you know what you are doing! We 
 msgid "Your node's setup is now complete."
 msgstr ""
 
-msgid "No coordinates set and node is offline. We *need* a proper location to assign this node to a Freifunk network ("mesh", "hood", "community", ...)."
+msgid "No coordinates set and node is offline. We *need* a proper location to assign this node to a Freifunk network (\"mesh\", \"hood\", \"community\", ...)."
 msgstr ""
 
 msgid "No location code set!"
@@ -180,3 +177,22 @@ msgstr "To function properly, you need to open the ports 10000-10099 UDP on your
 
 msgid "4830-firewall-notice-template"
 msgstr "(The current, not recommended, minimal configuration: %s UDP plus DNS & HTTP.)"
+
+msgid "Not set"
+msgstr ""
+
+msgid "Advanced settings / Node name"
+msgstr ""
+
+msgid "Open geolocation"
+msgstr ""
+
+#, lua-format
+msgid "Please first save the geolocation with a valid five-digit postal code: %s."
+msgstr ""
+
+msgid "Enter only the name part after the postal code. Umlauts are transliterated, special characters are replaced with hyphens, and consecutive hyphens are collapsed. The name part is limited to 31 characters."
+msgstr ""
+
+msgid "An address suggestion is unavailable because the geolocation contains no address."
+msgstr ""

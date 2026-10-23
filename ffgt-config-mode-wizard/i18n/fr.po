@@ -39,3 +39,32 @@ msgstr ""
 
 msgid "e.g. %s"
 msgstr "Ex: %s"
+
+msgid "Node name"
+msgstr "Nom du nœud"
+
+msgid "Not set"
+msgstr "Non défini"
+
+msgid "Advanced settings / Node name"
+msgstr "Paramètres avancés / Nom du nœud"
+
+#, lua-format
+msgid "To change it, go to %s."
+msgstr "Pour le modifier, rendez-vous sur %s."
+
+msgid "Open geolocation"
+msgstr "Ouvrir la géolocalisation"
+
+#, lua-format
+msgid "Please first save the geolocation with a valid five-digit postal code: %s."
+msgstr "Veuillez d’abord enregistrer la géolocalisation avec un code postal valide à cinq chiffres : %s."
+
+msgid "Enter only the name part after the postal code. Umlauts are transliterated, special characters are replaced with hyphens, and consecutive hyphens are collapsed. The name part is limited to 31 characters."
+msgstr "Saisissez uniquement la partie du nom après le code postal. Les lettres avec tréma sont translittérées, les caractères spéciaux sont remplacés par des traits d’union et les traits d’union consécutifs sont fusionnés. Cette partie du nom est limitée à 31 caractères."
+
+msgid "An address suggestion is unavailable because the geolocation contains no address."
+msgstr "Aucune adresse ne peut être proposée, car la géolocalisation ne contient pas d’adresse."
+
+msgid "The node name is used solely for identification of your node, e.g. on a node map. It does not affect the name (SSID) of the broadcasted WLAN."
+msgstr "Le nom du nœud sert uniquement à identifier votre nœud, par exemple sur une carte des nœuds. Il n’a aucun effet sur le nom (SSID) du réseau Wi-Fi diffusé."

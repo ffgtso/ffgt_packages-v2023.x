@@ -94,13 +94,10 @@ msgstr "Namensvorschläge:"
 msgid "Based on the coordinates configured, this node will be part of"
 msgstr "Aufgrund der konfigurierten Koordinaten wird dieser Knoten Teil von"
 
-msgid "If you want the location of your node to be displayed on the map, please tick the checkbox below."
-msgstr "Bitte den Haken setzen/gesetzt lassen, damit die Position dieses Knotens auf Karten angezeigt werden darf."
-
 msgid "To change, go to Advanced settings/Geolocation."
 msgstr "Zum ändern bitte unter Erweiterte Einstellungen auf Geolokalisierung gehen."
 
-msgid 'LOCATION NOT SET. Please go to %s.'
+msgid "LOCATION NOT SET. Please go to %s."
 msgstr "Koordinaten nicht gesetzt; bitte unter %s konfigurieren."
 
 msgid "The recorded email address looks valid:"
@@ -109,7 +106,7 @@ msgstr "Die Mailadresse des Betreibers dieses Knotens erscheint syntaktisch korr
 msgid "To change it, go to %s."
 msgstr "Zum ändern bitte %s aufrufen."
 
-msgid 'CONTACT NOT SET. Please go to %s.'
+msgid "CONTACT NOT SET. Please go to %s."
 msgstr "Keine Kontaktadresse angegeben, bitte unter %s eintragen."
 
 msgid "Please enter a valid(!) email address, so we can contact you if something needs to be done about your node."
@@ -164,7 +161,7 @@ msgstr "Da wir die Meshes ortsbezogen automatisch zuweisen, ändere diese Einste
 msgid "Your node's setup is now complete."
 msgstr "Dein Freifunk-Knoten ist nun fertig konfiguriert."
 
-msgid "No coordinates set and node is offline. We *need* a proper location to assign this node to a Freifunk network ("mesh", "hood", "community", ...)."
+msgid "No coordinates set and node is offline. We *need* a proper location to assign this node to a Freifunk network (\"mesh\", \"hood\", \"community\", ...)."
 msgstr "Keine Koordinaten angegeben und der Knoten ist offline. Wir benötigen eine Aufstellposition für jeden Konten, um diesen für das richtige Freifunk-Netzwerk (\"Mesh\", \"Hood\", \"Community\", ...) zu konfigurieren."
 
 msgid "No location code set!"
@@ -201,3 +198,22 @@ msgstr "Für die korrekte Funktion sind die UDP-Ports 10000-10099 in der Firewal
 
 msgid "4830-firewall-notice-template"
 msgstr "(Aktuelles, nicht empfohlenes, Minimum für den Tunnel: %s UDP sowie DNS & HTTP.)"
+
+msgid "Not set"
+msgstr "Nicht gesetzt"
+
+msgid "Advanced settings / Node name"
+msgstr "Erweiterte Einstellungen / Knotenname"
+
+msgid "Open geolocation"
+msgstr "Geolokalisierung öffnen"
+
+#, lua-format
+msgid "Please first save the geolocation with a valid five-digit postal code: %s."
+msgstr "Bitte zuerst die Geolokalisierung mit einer gültigen fünfstelligen PLZ speichern: %s."
+
+msgid "Enter only the name part after the postal code. Umlauts are transliterated, special characters are replaced with hyphens, and consecutive hyphens are collapsed. The name part is limited to 31 characters."
+msgstr "Nur den Namensteil hinter der PLZ eingeben. Umlaute werden umgeschrieben, Sonderzeichen durch Bindestriche ersetzt und mehrfache Bindestriche zusammengefasst. Der Namensteil wird auf 31 Zeichen gekürzt."
+
+msgid "An address suggestion is unavailable because the geolocation contains no address."
+msgstr "Für einen Adressvorschlag fehlt die Adresse in der Geolokalisierung."
