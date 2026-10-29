@@ -12,7 +12,7 @@ targetlocode="zzz"
 if [ "$lat" != "0.00" -a "$lon" != "0.00" ]; then
  # "Südwestfalen-Lippe"
  if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.480527645 && $1 < 51.776337691) && ($2 > 7.129440308 && $2 < 8.588218689)) {printf("true");}}')" = "true" ]; then
-  targetlocode="0sw"
+  targetlocode="zsw"
  fi
  # Kierspe
  if [ "$(echo "$lat;$lon" | awk 'BEGIN{FS=";";} {if (($1 > 51.104384245 && $1 < 51.333614775) && ($2 > 7.495422363 && $2 < 7.982940674)) {printf("true");}}')" = "true" ]; then
