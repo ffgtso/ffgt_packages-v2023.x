@@ -99,20 +99,16 @@ if [ "X${domain}" = "X" ]; then
  domain="zzz"
 fi
 
-former_fw="???"
+former_fw="alien"
 if [ "$(uci get autoupdater.stable.mirror | grep freifunk-lippe.de >/dev/null ; echo $?)" = "0" ]; then
  former_fw="LIP"
-fi
-
-if [ "$(uci get autoupdater.stable.mirror | grep freifunk-winterberg.net >/dev/null ; echo $?)" = "0" ]; then
- former_fw="WTB"
 fi
 
 if [ "$(uci get autoupdater.stable.mirror | grep freifunk-nordheide >/dev/null ; echo $?)" = "0" ]; then
  former_fw="NH"
 fi
 
-if [ "${former_fw}" = "LIP" -o "${former_fw}" = "WTB" -o "${former_fw}" = "NH" ]; then
+if [ "${former_fw}" != "alien" ]; then
  # FIXUPs
  for file in 550-rsk-config 888-button-bind
  do
@@ -138,7 +134,7 @@ if [ "${former_fw}" = "LIP" -o "${former_fw}" = "WTB" -o "${former_fw}" = "NH" ]
 
  if [ "${former_fw}" = "NH" ]; then
   olddom=$(uci get gluon.core.domain)
-  domain=$(echo ${olddom} | sed -e s/ffstd/sta/ -e s/ffnhsw/bhu/ -e s/ffnhso/jeg/ -e s/ffnhno/zes/ -e s/ffnhnw/win/ -e s/ffnh/xx4/ -e s/ffnhdiv/xx5/)
+  domain=$(echo ${olddom} | sed -e s/ffstd/sta/ -e s/ffnhsw/bhu/ -e s/ffnhso/jeg/ -e s/ffnhno/zes/ -e s/ffnhnw/win/ -e s/ffnhdiv/xx5/ -e s/ffnh/xx4/)
   targetlocode="$(/lib/gluon/ffgt-geolocate/is_mns.sh)"
   if [ "${targetlocode}" != "zzz" ]; then
    domain="${targetlocode}"
@@ -147,16 +143,6 @@ if [ "${former_fw}" = "LIP" -o "${former_fw}" = "WTB" -o "${former_fw}" = "NH" ]
    domain="zzz"
   fi
   targetlocode="ndh"
- fi
-
- if [ "${former_fw}" = "WTB" ]; then
-  olddom="$(uci get autoupdater.stable.mirror | cut -f 1 -d ' ' | sed -e 's%http://%%g' -e 's%firmware.\.freifunk-winterberg\.net/%%g' -e 's%/stable/sysupgrade%%g')"
-  #domain="$(echo ${olddom} | sed -e s/arnsberg/mns/ -e s/biggesee/ole/ -e s/hallenberg/hs0/ -e s/lennestadt/ole/ -e s/medebach/hs0/ -e s/meschedebestwig/hs0/ -e s/moehnequelle/hs0/ -e s/siedlinghausen_silbach/hs0/ -e s/sundern/hs0/ -e s/warstein/mns/ -e s/winterberg_doerfer/wi0/ -e s/winterberg_hoehendoerfer/wi1/ -e s/winterberg_kernstadt/wig/)"
-  domain="$(echo ${olddom} | sed -e s/arnsberg/wb1/ -e s/biggesee/wb2/ -e s/hallenberg/wb3/ -e s/lennestadt/wb4/ -e s/medebach/wb5/ -e s/meschedebestwig/wb6/ -e s/moehnequelle/wb7/ -e s/siedlinghausen_silbach/wb8/ -e s/sundern/wb9/ -e s/warstein/wba/ -e s/winterberg_doerfer/wbb/ -e s/winterberg_hoehendoerfer/wbc/ -e s/winterberg_kernstadt/wbd/)"
-  if [ ! -e /lib/gluon/domains/${domain}.json ]; then
-   domain="zzz"
-  fi
-  targetlocode="wtb"
  fi
 
  lat=$(uci get gluon-node-info.@location[0].latitude 2>/dev/null || echo "0.00")

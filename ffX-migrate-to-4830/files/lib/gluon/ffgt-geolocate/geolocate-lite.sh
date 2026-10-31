@@ -64,14 +64,23 @@ if [ ${runnow} -eq 1 ]; then
    sleep 5
    wget -q -O /tmp/geoloc.out "http://setup.${IPVXPREFIX}4830.org/geoloc.php?list=me&node=$mac"
    if [ -e /tmp/geoloc.out ]; then
-    # Actually, we might want to sanity check the reply, as it could be empty or worse ... (FIXME) 
-    /bin/cat /dev/null >/tmp/geoloc.sh
-    haslocation="`/sbin/uci get gluon-node-info.@location[0] 2>/dev/null]`"
+    haslocation="$(/sbin/uci get gluon-node-info.@location[0] 2>/dev/null)"
     if [ "${haslocation}" != "location" ]; then
-     echo "/sbin/uci add gluon-node-info location" >>/tmp/geoloc.sh
+     /sbin/uci add gluon-node-info location ||:
     fi
-    /usr/bin/awk </tmp/geoloc.out '/^LAT:/ {printf("/sbin/uci set gluon-node-info.@location[0].latitude=%s\n", $2);} /^LON:/ {printf("/sbin/uci set gluon-node-info.@location[0].longitude=%s\n", $2);} /^ADR:/ {printf("/sbin/uci set gluon-node-info.@location[0].addr=%c%s%c\n", 39, $2, 39);} /^CTY:/ {printf("/sbin/uci set gluon-node-info.@location[0].city=%s\n", $2);} /^ZIP:/ {printf("/sbin/uci set gluon-node-info.@location[0].zip=%s\n", $2);} /^LOC:/ {printf("/sbin/uci set gluon-node-info.@location[0].migration_locode=%s\n", $2);} END{printf("/sbin/uci commit gluon-node-info\n");}' >>/tmp/geoloc.sh
-    /bin/sh /tmp/geoloc.sh
+    while read -r key value; do
+     case "$key" in
+      LAT:) field=latitude;;
+      LON:) field=longitude;;
+      ADR:) field=addr;;
+      CTY:) field=city;;
+      ZIP:) field=zip;;
+      LOC:) field=migration_locode;;
+      *) continue;;
+     esac
+     uci set gluon-node-info.@location[0].${field}="${value}"
+    done </tmp/geoloc.out
+    uci commit gluon-node-info
    fi
   fi
  fi
