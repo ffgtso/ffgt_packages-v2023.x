@@ -1,0 +1,3 @@
+#!/bin/sh
+# Set before Gluon's 10stop-network and preserve across sysupgrade handoff.
+: > /tmp/4830-offline-manager.upgrading

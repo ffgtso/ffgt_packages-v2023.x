@@ -1,0 +1,10 @@
+#!/usr/bin/lua
+local runtime = require 'offline-manager.runtime'
+local controller = require 'offline-manager.controller'
+local lock = runtime.lock('tick')
+if not lock then os.exit(0) end
+runtime.install_signals()
+local ok, result = pcall(controller.tick, runtime)
+if not ok then runtime.log(result) end
+runtime.unlock(lock)
+os.exit(ok and result and 0 or 1)

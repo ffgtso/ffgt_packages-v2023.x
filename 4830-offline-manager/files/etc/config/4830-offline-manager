@@ -1,0 +1,4 @@
+config manager 'settings'
+	option enabled '1'
+	option ssid_enabled '1'
+	option reboot_enabled '1'

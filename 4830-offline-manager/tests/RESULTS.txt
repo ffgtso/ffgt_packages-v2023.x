@@ -1,0 +1,8 @@
+Validation: 2026-11-02
+Target: Gluon v2023.1
+Lua 5.1: 68 tests passed (mocked router APIs).
+Python shell wrapper: 1 test passed.
+All Lua source files: luac -p passed.
+Shell entry and hooks: sh -n passed.
+Compatibility patch: git apply --check and byte comparison against delivered package passed.
+No firmware build, native router integration test or hardware tests performed.

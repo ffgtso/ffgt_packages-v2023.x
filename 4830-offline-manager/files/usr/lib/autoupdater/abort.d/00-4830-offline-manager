@@ -1,0 +1,2 @@
+#!/bin/sh
+rm -f /tmp/4830-offline-manager.upgrading

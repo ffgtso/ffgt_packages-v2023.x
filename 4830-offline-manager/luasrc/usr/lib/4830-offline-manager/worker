@@ -1,0 +1,30 @@
+#!/usr/bin/lua
+local runtime = require 'offline-manager.runtime'
+local core = require 'offline-manager.core'
+local lock = runtime.lock('action')
+if not lock then os.exit(0) end
+runtime.install_signals()
+local now, state = runtime.uptime(), runtime.load_state()
+if not core.outage_valid(state, now, runtime.boot_id()) or now < 900
+	or now - state.since <= 3600 or now - state.since > 5700
+	or not runtime.option('enabled') or not runtime.option('autoupdate_enabled')
+	or not runtime.autoupdate_enabled() or runtime.upgrading()
+	or runtime.autoupdater_busy() or runtime.has_gateways() ~= false then os.exit(0) end
+-- Bound preparation/AP probing, but never kill autoupdater or sysupgrade.
+runtime.set_deadline(math.min(now + 540, state.since + 5700))
+local kind, active = runtime.wifi_state()
+if kind == 'absent' then
+	os.exit(core.wan_round(runtime) and 0 or 1)
+elseif kind ~= 'active' then
+	runtime.log('No active WLAN or unable to determine WLAN state')
+	os.exit(0)
+end
+local branch = runtime.uci:get('autoupdater', 'settings', 'branch')
+if not branch or not runtime.branch_exists(branch) then
+	runtime.log('Missing WLAN autoupdater branch'); os.exit(1)
+end
+local ok, candidates = pcall(runtime.scan, active)
+if not ok then runtime.log(tostring(candidates)); os.exit(1) end
+if runtime.cancelled() or runtime.has_gateways() ~= false then os.exit(0) end
+runtime.log('Open Freifunk candidates: ' .. #candidates)
+os.exit(core.round(runtime, candidates, branch) and 0 or 1)

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Delay every normal invocation so minute-zero cron jobs can finish first.
+sleep 18
+exec /usr/lib/4830-offline-manager/tick
