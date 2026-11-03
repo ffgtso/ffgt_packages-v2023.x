@@ -1,3 +1,6 @@
+> Historischer Portierungsbericht für Release 2. Die aktuelle PUMP-Erweiterung
+> (Release 3), Patchbasis und aktuelle Prüfergebnisse stehen in PUMP.md und tests/RESULTS.txt.
+
 # 4830-offline-manager: Gluon v2023.1 / v2025.1
 
 Stand: 2. November 2026. Geprüft gegen die exakten Upstream-Tags v2023.1 und

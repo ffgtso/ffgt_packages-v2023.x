@@ -2,7 +2,8 @@
 
 Gemeinsames Lua-Paket für Gluon v2023.1/OpenWrt 22.03: Offline-SSIDs,
 WLAN-/WAN-Recovery-Updates und Offline-Reboot. Ersetzt `tecff-ssid-changer`,
-`tecff-autoupdater-wifi-fallback` und `4830-node-watchdog`. Kein IPK oder
+`tecff-autoupdater-wifi-fallback`, `pump-autoupdater-wifi-fallback` und
+`4830-node-watchdog`. Unterstützt optional installiertes `gluon-pump`. Kein IPK oder
 fertiges Firmware-Image; ausschließlich Quellpaket.
 
 ## Zwei getrennte Kriterien
@@ -88,8 +89,11 @@ aber ausgeschaltete WLAN-Interfaces werden nicht für einen Scan aktiviert.
 WLAN: aktive PHYs scannen; offene Infrastruktur-APs mit `freifunk` im SSID-Namen
 nach Signal sortieren; normale WLAN-Interfaces abschalten; Station `offlinewifi`
 per `iw` anlegen und als externes Gerät bei netifd anmelden. Das logische Interface
-`offline_wifi6` bezieht IPv6-Adresse, Default-Route und DNS via netifd/odhcp6c.
-Danach wird `autoupdater -f -b <konfigurierter Branch>` aufgerufen. Exitcode 0 ohne
+`offline_wifi4` und `offline_wifi6` beziehen IPv4-/IPv6-Adressen, Default-Routen
+und DNS via netifd. Eine nutzbare Adressfamilie genügt. IPv6 wird bevorzugt;
+bei IPv4-only wird ein vorhandener Branch `offline4` verwendet, sonst der
+konfigurierte Standardbranch. Die Mirror-URLs müssen über die verfügbare Familie
+erreichbar sein; ein Branch-Name erzwingt keine Adressfamilie. Exitcode 0 ohne
 begonnenes sysupgrade kann lediglich „keine neue Firmware“ bedeuten: weitere
 Kandidaten werden bis zum Vorbereitungszeitlimit geprüft. Es gibt keinen separaten
 wpa_supplicant-Ersatz und keine permanente UCI-WLAN-Umschaltung.
@@ -119,12 +123,13 @@ konfigurierten Standardbranch.
 
 Konfiguration `/etc/config/4830-offline-manager`, Section `settings`:
 `enabled`, `ssid_enabled`, `autoupdate_enabled`, `reboot_enabled` (Bool).
-`autoupdate_enabled` übernimmt beim ersten Upgrade den alten Fallback-Schalter,
-sonst den Autoupdater-Schalter. Updates setzen zusätzlich einen aktivierten
+`autoupdate_enabled` bleibt erhalten, wenn bereits gesetzt. Andernfalls gilt
+beim Upgrade die Reihenfolge: Pump-Fallback-Schalter, gewöhnlicher Fallback-Schalter,
+normaler Autoupdater-Schalter. Ein explizites deaktiviert bleibt deaktiviert. Updates setzen zusätzlich einen aktivierten
 normalen Autoupdater voraus. SSID-Funktion und Watchdog sind standardmäßig aktiv.
 Es gibt keinen Force-Schalter, der die Fristen oder Gateway-Präsenz umgeht.
 
-Die neue WLAN-Firewall-Zone `offlinefb` erlaubt den nötigen ICMPv6-/DHCPv6-Verkehr,
+Die neue WLAN-Firewall-Zone `offlinefb` erlaubt den nötigen ICMPv4-/ICMPv6-/DHCPv4-/DHCPv6-Verkehr,
 aber kein Forwarding und keine zusätzliche SSH-Freigabe. Keine Änderung an
 Signatur-/Geräte-/Versionsprüfungen des Autoupdaters.
 
@@ -136,8 +141,8 @@ python3 tests/test_wrapper.py
 find luasrc -type f -exec luac5.1 -p '{}' \;
 ```
 
-68 Lua-5.1-Tests mit simulierten Router-APIs, ein ausführbarer Wrapper-Test für
-Reihenfolge `sleep 18` vor Tick, Lua-/Shell-Syntaxprüfungen. Abgedeckt sind u. a.
+83 Lua-5.1-Tests mit simulierten Router-APIs, ein ausführbarer Wrapper-Test sowie ein C-Hosttest des übernommenen
+respondd-Adapters mit simulierten UCI-/JSON-APIs. Der Wrapper prüft die Reihenfolge `sleep 18` vor Tick, Lua-/Shell-Syntaxprüfungen. Abgedeckt sind u. a.
 TQ 0/15/16/29/30, getrennte Open-/OWE-SSIDs, Gateway-Verlust/Erholung, stündliche
 Schwelle, Zehn-Minuten-Takt, 95-Minuten-Reboot, Sperren, Upgrade-Handoff, WAN,
 netifd-Anmeldung und Migration. Die Tests ersetzen keinen Firmware-Build und
@@ -158,3 +163,47 @@ gegen das ursprünglich gelieferte v2021.1-Paket. Details und festgeschriebene
 Quellen stehen in [COMPATIBILITY.md](COMPATIBILITY.md).
 Die PHY-Ermittlung wurde auf `gluon.wireless.find_phy` korrigiert. Das behebt
 auch einen Fehler des ursprünglichen Pakets, nicht nur eine Versionsänderung.
+
+## PUMP-Unterstützung (Release 3)
+
+Ein vorhandener aktivierter PUMP-WLAN-Uplink wird vor Scan und WLAN-Abbau geprüft.
+`pump_wan`/`pump_wan6` müssen jeweils laut netifd aktiv sein und zum tatsächlichen
+Gerät gehören (standardmäßig `pumpwan`); nur dessen Kernel-Default-Routen zählen.
+Dann werden `offline4`/`offline6` mit `gluon-wan` und `libpacketmark` versucht.
+Fehlt ein solcher Branch, wird beim PUMP-Uplink der konfigurierte Standardbranch
+versucht. Bei Dual Stack kann dieser deshalb zweimal aufgerufen werden.
+Die Gluon-PUMP-DNS-Hooks liefern dabei den WAN-Resolvern die Uplink-DNS-Daten.
+Der br-wan-Pfad ohne WLAN behält seine bisherige Branch-Auswahl bei.
+
+Nach Rückkehr ohne sysupgrade wird der normale WLAN-Fallback versucht, falls
+weiterhin keine Batman-Gateways vorhanden sind und Zeitbudget verbleibt.
+Ein vorhandener Uplink hebt weder die Ausfallfrist auf noch verhindert er den
+95-Minuten-Reboot. Entscheidend bleiben ausschließlich Batman-Gateways.
+
+PUMP-AP, PUMP-STA und PUMP-WLAN-Uplink bleiben in UCI vollständig erhalten:
+keine Löschung von wifi-iface-Abschnitten, kein revert, keine Änderung an
+Schlüsseln, Kanälen, deaktivierten Client-BSS oder gespeicherten Ownership-Werten.
+Nach dem temporären WLAN-Abbau aktiviert `wifi up` dieselbe Konfiguration wieder;
+Pump-Uplink-Hotplug-Hooks übernehmen DNS und Tunneldigger-Bindung wie beim normalen
+Verbindungsaufbau. Ein erneuter Aufruf von `335-gluon-pump` ist deshalb nicht nötig.
+Die SSID-Funktion verändert ausschließlich Client-/OWE-BSS, keine PUMP-BSS.
+
+Diese Integration übernimmt die Recovery-Funktion des alten Pakets, dessen
+Aktivierungseinstellung und das respondd-Feld `software.autoupdater.wifi-fallback`.
+Das Feld ist nur wahr, wenn Manager, dessen Autoupdate und der normale Autoupdater
+aktiviert sind. Die Ablaufsteuerung bleibt Lua/Shell; der vorhandene kleine native
+respondd-C-Adapter wurde mit seinen Lizenzhinweisen übernommen und auf die neuen
+Einstellungen umgestellt. Alte Zwei-Stunden-Fristen und Force-Umgehungen werden
+nicht übernommen. Der Manager entfernt den alten Pump-Fallback-Cron-Eintrag;
+Paketkonflikte schließen dessen parallele Installation aus.
+
+`gluon-pump` ist keine Pflichtabhängigkeit. Auf PUMP-Geräten stellt es selbst
+den WPA3-fähigen Supplicant bereit. Der Manager benötigt für die temporäre offene
+Station keinen eigenen Supplicant und erzwingt keine konkurrierende Mini-Variante.
+Das alte Paketverzeichnis bleibt im Feed für andere Images erhalten.
+
+Quellbasis dieser Erweiterung: `ffgtso/ffgt_packages-v2023.x`, Branch `master`,
+Commit `b622663eca1110cf9c7e034cc7dea2b7a8800697`, PUMP-Version 0.1.22.
+Der Patch ist für das dortige v2023.1-Paket (Release 2 → 3), kein Patch für
+v2025.1: WAN-Wrapper und Hostapd-Reload unterscheiden sich dort weiterhin.
+Siehe `PUMP.md` für Einbau, Site-Änderung und Testgrenzen.

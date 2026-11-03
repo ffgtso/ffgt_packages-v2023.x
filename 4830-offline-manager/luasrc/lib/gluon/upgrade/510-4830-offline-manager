@@ -5,7 +5,9 @@ if not uci:get(name, 'settings') then
 	uci:section(name, 'manager', 'settings', {enabled = true, ssid_enabled = true, reboot_enabled = true})
 end
 if uci:get(name, 'settings', 'autoupdate_enabled') == nil then
-	local legacy = 'autoupdater-wifi-fallback'
+	-- Prefer the PUMP predecessor when both old configurations exist.
+	local legacy = uci:get('pump-autoupdater-wifi-fallback', 'settings', 'enabled') ~= nil
+		and 'pump-autoupdater-wifi-fallback' or 'autoupdater-wifi-fallback'
 	local enabled = uci:get(legacy, 'settings', 'enabled')
 	uci:set(name, 'settings', 'autoupdate_enabled', enabled == nil
 		and uci:get_bool('autoupdater', 'settings', 'enabled')
@@ -16,9 +18,14 @@ uci:delete('wireless', 'fallback')
 for _, s in ipairs({'fallback', 'fallback6', 'ffgt_fallback6'}) do uci:delete('network', s) end
 for _, s in ipairs({'fallback', 'fallback_ICMPv4_in', 'fallback_ICMPv6_in', 'fallback_ssh',
 	'ffgt_fallback', 'ffgt_fallback_icmp6', 'ffgt_fallback_dhcp6'}) do uci:delete('firewall', s) end
-for _, s in ipairs({'autoupdater-wifi-fallback', 'ssid-changer', '4830-node-watchdog'}) do
+for _, s in ipairs({'autoupdater-wifi-fallback', 'pump-autoupdater-wifi-fallback', 'ssid-changer', '4830-node-watchdog'}) do
 	os.remove('/usr/lib/micron.d/' .. s)
 end
+uci:delete('network', 'offline_wifi4')
+uci:section('network', 'interface', 'offline_wifi4', {
+	ifname = 'offlinewifi', proto = 'dhcp', auto = false,
+	peerdns = true, metric = 1,
+})
 uci:delete('network', 'offline_wifi6')
 uci:section('network', 'interface', 'offline_wifi6', {
 	ifname = 'offlinewifi', proto = 'dhcpv6', auto = false,
@@ -27,7 +34,7 @@ uci:section('network', 'interface', 'offline_wifi6', {
 })
 uci:delete('firewall', 'offline_manager')
 uci:section('firewall', 'zone', 'offline_manager', {
-	name = 'offlinefb', network = {'offline_wifi6'}, device = {'offlinewifi'},
+	name = 'offlinefb', network = {'offline_wifi6', 'offline_wifi4'}, device = {'offlinewifi'},
 	input = 'REJECT', output = 'ACCEPT', forward = 'REJECT',
 })
 uci:delete('firewall', 'offline_manager_icmp6')
@@ -43,6 +50,18 @@ uci:delete('firewall', 'offline_manager_dhcp6')
 uci:section('firewall', 'rule', 'offline_manager_dhcp6', {
 	name = 'offline-manager-DHCPv6', src = 'offlinefb',
 	proto = 'udp', src_port = '547', dest_port = '546', family = 'ipv6', target = 'ACCEPT',
+})
+
+uci:delete('firewall', 'offline_manager_dhcp4')
+uci:section('firewall', 'rule', 'offline_manager_dhcp4', {
+	name = 'offline-manager-DHCPv4', src = 'offlinefb',
+	proto = 'udp', src_port = '67', dest_port = '68', family = 'ipv4', target = 'ACCEPT',
+})
+uci:delete('firewall', 'offline_manager_icmp4')
+uci:section('firewall', 'rule', 'offline_manager_icmp4', {
+	name = 'offline-manager-ICMPv4', src = 'offlinefb',
+	proto = 'icmp', family = 'ipv4', target = 'ACCEPT',
+	icmp_type = {'destination-unreachable', 'time-exceeded', 'parameter-problem', 'echo-request'},
 })
 
 for _, file in ipairs({name, 'wireless', 'network', 'firewall'}) do uci:save(file) end

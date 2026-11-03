@@ -6,7 +6,8 @@ local function with_hostapd(fn)
  local paths = {'/var/run/hostapd-phy0.conf', '/var/run/hostapd-phy1.0.conf'}
  local text = 'driver=nl80211\ninterface=client0\nssid=Open\nconfig_id=open-hash\n' ..
   'bss=owe0\nssid=Secure\nconfig_id=owe-hash\nwpa_key_mgmt=OWE\nignore_broadcast_ssid=0\n' ..
-  'bss=private0\nssid=Private\nconfig_id=private-hash\nwpa_passphrase=secret\n'
+  'bss=private0\nssid=Private\nconfig_id=private-hash\nwpa_passphrase=secret\n' ..
+  'bss=pump0\nssid=PUMP-domain\nwpa_key_mgmt=SAE WPA-PSK\nwpa_passphrase=pump-secret\n'
  local files = {[paths[1]]=text, [paths[2]]=text:gsub('client0','client1'):gsub('owe0','owe1'):gsub('private0','private1'),
   ['/proc/sys/kernel/hostname']='router\n'}
  local pending='/tmp/4830-offline-manager.ssid-reload'
@@ -20,6 +21,7 @@ local function with_hostapd(fn)
    cb({['.name']='client_radio'..i,ifname='client'..i,ssid='Open'})
    cb({['.name']='owe_radio'..i,ifname='owe'..i,ssid='Secure'})
    cb({['.name']='wan_radio'..i,ifname='private'..i,ssid='Private'})
+   cb({['.name']='pump_radio'..i,ifname='pump'..i,ssid='PUMP-domain'})
   end
  end
  io.open=function(p,mode)
@@ -51,6 +53,7 @@ test('Compatibility: independent Open and OWE SSIDs reload after all radio write
    assert(files[p]:find('wpa_key_mgmt=OWE\nignore_broadcast_ssid=0',1,true))
    assert(files[p]:find('ssid=Private\nconfig_id=private-hash\nwpa_passphrase=secret',1,true))
    assert(not files[p]:find('owe_transition',1,true))
+   assert(files[p]:find('ssid=PUMP-domain\nwpa_key_mgmt=SAE WPA-PSK\nwpa_passphrase=pump-secret',1,true))
   end
   assert(#calls==1 and files[pending]==nil)
   runtime.ssid(false);assert(#calls==1)

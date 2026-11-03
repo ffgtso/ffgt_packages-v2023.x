@@ -12,6 +12,7 @@ local syslog = require 'posix.syslog'
 local core = require 'offline-manager.core'
 local M = { uci = uci }
 local iface, network = 'offlinewifi', 'offline_wifi6'
+local network4 = 'offline_wifi4'
 local output = '/tmp/4830-offline-manager.output.' .. unistd.getpid()
 local interrupted, restoring = false, false
 local deadline
@@ -182,11 +183,30 @@ function M.scan(active_phys)
 	return result
 end
 
-local function status()
-	local rc, text = M.command({'ubus', 'call', 'network.interface.' .. network, 'status'}, 5, true)
+local function status(name)
+	local rc, text = M.command({'ubus', 'call', 'network.interface.' .. (name or network), 'status'}, 5, true)
 	if rc ~= 0 then return nil end
 	local ok, value = pcall(json.parse, text)
-	return ok and value or nil
+	return ok and type(value) == 'table' and value or nil
+end
+
+function M.default_branch() return uci:get('autoupdater', 'settings', 'branch') end
+
+function M.pump_uplink_enabled()
+	return uci:get_bool('pump', 'settings', 'uplink_enabled')
+end
+
+function M.pump_routes()
+	if not M.pump_uplink_enabled() then return {} end
+	local device = uci:get('wireless', 'pump_uplink', 'ifname') or 'pumpwan'
+	if type(device) ~= 'string' or not device:match('^[%w_%.%-]+$') or not util.readfile('/sys/class/net/' .. device .. '/ifindex') then return {} end
+	local routes = core.wan_routes(util.readfile('/proc/net/route') or '',
+		util.readfile('/proc/net/ipv6_route') or '', device)
+	for _, family in ipairs({4, 6}) do
+		local s = status(family == 4 and 'pump_wan' or 'pump_wan6')
+		if not s or not s.up or (s.l3_device or s.device) ~= device then routes[family] = nil end
+	end
+	return routes
 end
 
 function M.down()
@@ -204,11 +224,14 @@ function M.stop()
 	-- Finish cleanup even after SIGTERM; never apply this to autoupdater.
 	local previous = restoring
 	restoring = true
-	local stopped = M.command({'ifdown', network}, 15) == 0
+	local stopped = true
+	for _, name in ipairs({network4, network}) do
+		stopped = M.command({'ifdown', name}, 15) == 0 and stopped
+	end
 	local down = false
 	for _ = 1, 15 do
-		local s = status()
-		if s and not s.up and not s.pending then down = true; break end
+		local s, s4 = status(), status(network4)
+		if s and s4 and not s.up and not s.pending and not s4.up and not s4.pending then down = true; break end
 		M.pause()
 	end
 	local f = io.open('/sys/class/net/' .. iface .. '/ifindex')
@@ -239,14 +262,17 @@ function M.connect(net)
 		if rc == 0 and bssid and bssid:lower() == net.bssid then
 			-- Manually created WLAN devices must be registered as external
 			-- with netifd; carrier alone does not make them available.
-			local object = 'network.interface.' .. network
-			if M.command({'ubus', 'call', object, 'add_device',
-				'{"name":"' .. iface .. '","link-ext":true}'}, 5) ~= 0 then
-				M.log('Cannot register fallback device with netifd')
-				return false
+			for _, name in ipairs({network, network4}) do
+				local object = 'network.interface.' .. name
+				if M.command({'ubus', 'call', object, 'add_device',
+					'{"name":"' .. iface .. '","link-ext":true}'}, 5) ~= 0 then
+					M.log('Cannot register fallback device with netifd')
+					return false
+				end
+				-- Avoid ifup's global network reload after creating the station.
+				if M.command({'ubus', 'call', object, 'up'}, 5) ~= 0 then return false end
 			end
-			-- Avoid ifup's global network reload after creating the station.
-			return M.command({'ubus', 'call', object, 'up'}, 5) == 0
+			return true
 		end
 		if M.cancelled() then return false end
 		M.pause()
@@ -256,15 +282,19 @@ end
 
 function M.ready()
 	for _ = 1, 60 do
-		if core.ipv6_ready(status()) then return true end
+		if core.ipv6_ready(status()) then return {[6] = true} end
+		if core.ipv4_ready(status(network4)) then return {[4] = true} end
 		if M.cancelled() then return false end
 		M.pause()
 	end
-	M.log('No IPv6 address/default route/DNS on fallback interface')
+	M.log('No IPv4/IPv6 address/default route/DNS on fallback interfaces')
 	return false
 end
 
-function M.update(branch)
+function M.update(branch, families)
+	if type(families) == 'table' and families[4] and not families[6] and M.branch_exists('offline4') then
+		branch = 'offline4'
+	end
 	return M.command({'/usr/sbin/autoupdater', '-f', '-b', branch}, nil)
 end
 

@@ -11,12 +11,13 @@ local function entry(options)
   autoupdater_busy=function() return options.busy or false end,
   has_gateways=function() return options.gateway or false end,
   set_deadline=function(d) calls.deadline=d end,
+  pump_uplink_enabled=function() return options.pump or false end,
   wifi_state=function() return options.wifi or 'active', {} end,
   branch_exists=function() return true end, scan=function() calls.scan=true; return {} end,
   cancelled=function() return false end, log=function() end}
  package.loaded['offline-manager.runtime']=o
  package.loaded['offline-manager.core']={outage_valid=core.outage_valid,
-  wan_round=function() calls.wan=true; return true end,
+  wan_round=function(_,pump) if pump then calls.pump=true;options.upgrading=options.pump_upgrade;options.gateway=options.pump_gateway else calls.wan=true end; return true end,
   round=function() calls.round=true; return true end}
  local exit=os.exit; os.exit=function(code) error({exit=code}) end
  local ok,err=pcall(dofile,'luasrc/usr/lib/4830-offline-manager/worker')
@@ -27,6 +28,15 @@ local function entry(options)
 end
 test('Worker without WLAN goes to WAN without scanning',function()
  local c=entry({wifi='absent'}); assert(c.wan and not c.scan and c.exit==0)
+end)
+test('Worker tries PUMP uplink before WiFi scan',function()
+ local c=entry({pump=true}); assert(c.pump and c.scan and c.round and not c.wan)
+end)
+test('PUMP update handoff prevents subsequent scan',function()
+ local c=entry({pump=true,pump_upgrade=true}); assert(c.pump and not c.scan and not c.round and c.exit==0)
+end)
+test('PUMP gateway recovery prevents subsequent scan',function()
+ local c=entry({pump=true,pump_gateway=true}); assert(c.pump and not c.scan and not c.round and c.exit==0)
 end)
 test('Worker respects gateway update and reboot guards',function()
  for _,o in ipairs({{gateway=true},{upgrading=true},{busy=true},{now=3600},{now=5701}}) do

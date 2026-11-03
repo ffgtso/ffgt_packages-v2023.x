@@ -12,6 +12,11 @@ if not core.outage_valid(state, now, runtime.boot_id()) or now < 900
 	or runtime.autoupdater_busy() or runtime.has_gateways() ~= false then os.exit(0) end
 -- Bound preparation/AP probing, but never kill autoupdater or sysupgrade.
 runtime.set_deadline(math.min(now + 540, state.since + 5700))
+-- Use an existing PUMP L3 uplink before interrupting any WLAN.
+if runtime.pump_uplink_enabled() then
+	if not core.wan_round(runtime, true) then os.exit(1) end
+	if runtime.upgrading() or runtime.cancelled() or runtime.has_gateways() ~= false then os.exit(0) end
+end
 local kind, active = runtime.wifi_state()
 if kind == 'absent' then
 	os.exit(core.wan_round(runtime) and 0 or 1)

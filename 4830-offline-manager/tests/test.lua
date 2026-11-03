@@ -55,6 +55,7 @@ local function ops()
 	o.cancelled = function() return false end
 	o.upgrading = function() return false end
 	o.log = function() end
+	o.has_gateways = function() return false end
 	return o
 end
 local function count(list, key)
@@ -205,7 +206,7 @@ test('IPv6 readiness polls own logical interface', function()
 end)
 test('IPv6 deadline prevents endless wait', function()
 	local n = 0; r.command = function() n = n + 1; return 0, 'down' end
-	assert(not r.ready()); assert(n == 60)
+	assert(not r.ready()); assert(n == 120)
 end)
 test('WiFi teardown waits for interfaces to disappear', function()
 	local n = 0
@@ -329,6 +330,7 @@ test('WAN stops on upgrade handoff cancellation or new gateway', function()
 end)
 
 dofile('tests/compat.lua')(test, r, uci, files)
+dofile('tests/pump.lua')(test, core, r, uci, files)
 dofile('tests/controller.lua')(test, core)
 dofile('tests/entry.lua')(test, core)
 print(string.format('%d tests passed (%s)', total, _VERSION))

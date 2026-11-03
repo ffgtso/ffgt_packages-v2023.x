@@ -54,8 +54,25 @@ function M.ipv6_ready(status)
 	return address and route and #(status['dns-server'] or {}) > 0
 end
 
--- Accept only UP unicast default routes on the actual WAN bridge.
-function M.wan_routes(ipv4, ipv6)
+-- DHCPv4-only recovery networks are useful on PUMP installations too.
+function M.ipv4_ready(status)
+	if type(status) ~= 'table' or not status.up then return false end
+	local address, route = false, false
+	for _, entry in ipairs(status['ipv4-address'] or {}) do
+		local a, b, c, d = (entry.address or ''):match('^(%d+)%.(%d+)%.(%d+)%.(%d+)$')
+		a, b, c, d = tonumber(a), tonumber(b), tonumber(c), tonumber(d)
+		if a and a > 0 and a < 224 and a ~= 127 and b <= 255 and c <= 255 and d <= 255
+			and not (a == 169 and b == 254) then address = true end
+	end
+	for _, entry in ipairs(status.route or {}) do
+		if entry.target == '0.0.0.0' and tonumber(entry.mask) == 0 then route = true end
+	end
+	return address and route and #(status['dns-server'] or {}) > 0
+end
+
+-- Accept only UP unicast default routes on the specified device (default: br-wan).
+function M.wan_routes(ipv4, ipv6, device)
+	device = device or 'br-wan'
 	local found = {}
 	local function usable(flags)
 		local n = tonumber(flags, 16)
@@ -63,32 +80,35 @@ function M.wan_routes(ipv4, ipv6)
 	end
 	for line in ipv4:gmatch('[^\n]+') do
 		local f = {}; for value in line:gmatch('%S+') do f[#f + 1] = value end
-		if f[1] == 'br-wan' and f[2] == '00000000' and f[8] == '00000000'
+		if f[1] == device and f[2] == '00000000' and f[8] == '00000000'
 			and usable(f[4]) then found[4] = true end
 	end
 	for line in ipv6:gmatch('[^\n]+') do
 		local f = {}; for value in line:gmatch('%S+') do f[#f + 1] = value end
-		if f[1] == string.rep('0', 32) and f[2] == '00' and f[10] == 'br-wan'
+		if f[1] == string.rep('0', 32) and f[2] == '00' and f[10] == device
 			and usable(f[9]) then found[6] = true end
 	end
 	return found
 end
 
-function M.wan_round(ops)
+function M.wan_round(ops, pump)
+	local routes = pump and ops.pump_routes or ops.wan_routes
+	local label = pump and 'PUMP uplink' or 'br-wan'
 	for _, family in ipairs({4, 6}) do
 		if ops.upgrading() or ops.cancelled() then return true end
 		-- Recheck before every attempt, including after offline4 returns.
 		local gateways = ops.has_gateways()
 		if gateways ~= false then return gateways == true end
 		local branch = 'offline' .. family
-		if ops.wan_routes()[family] then
-			if ops.branch_exists(branch) then
-				ops.log('Trying WAN branch ' .. branch .. ' on br-wan')
+		if routes()[family] then
+			if pump and not ops.branch_exists(branch) then branch = ops.default_branch() end
+			if branch and ops.branch_exists(branch) then
+				ops.log('Trying uplink branch ' .. branch .. ' on ' .. label)
 				if ops.cancelled() then return true end
 				local rc = ops.update_wan(branch)
 				ops.log('WAN autoupdater returned ' .. tostring(rc))
 			else
-				ops.log('Missing autoupdater branch ' .. branch)
+				ops.log('Missing autoupdater branch ' .. tostring(branch))
 			end
 		end
 	end
@@ -105,9 +125,10 @@ function M.round(ops, candidates, branch)
 			if ops.cancelled() then break end
 			assert(ops.stop(), 'Cannot stop previous fallback interface')
 			ops.log('Trying ' .. net.phy .. ' ' .. net.bssid .. ' ' .. string.format('%q', net.ssid))
-			if ops.connect(net) and ops.ready() and not ops.cancelled() then
+			local families = ops.connect(net) and ops.ready()
+			if families and not ops.cancelled() and ops.has_gateways() == false then
 				-- No outer timeout: never kill autoupdater during sysupgrade.
-				local rc = ops.update(branch)
+				local rc = ops.update(branch, families)
 				ops.log('Autoupdater returned ' .. tostring(rc) .. '; trying next AP')
 				-- Exit 0 can mean "no newer firmware". A completed flash reboots.
 			end
