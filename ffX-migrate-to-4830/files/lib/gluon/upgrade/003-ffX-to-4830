@@ -4,6 +4,8 @@ LOCKFILE="/tmp/ffX-to-4830.lck"
 
 echo "$0 start." | tee -a /root/multidomain-migration.log
 
+sed '/firmware.ipv6.4830.org/d' -i /etc/hosts
+
 is_configured="$(uci get gluon-setup-mode.@setup_mode[0].configured 2>/dev/null || echo 0)"
 if [ "${is_configured}" != "1" ]; then
  echo "Skipping run on unconfigured node!" | tee -a /root/multidomain-migration.log
